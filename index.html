@@ -1475,8 +1475,17 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
   // Supports combined OLD===SPLIT===NEW blocks (single or ===BLOCK=== batches).
   document.getElementById('pasteAndProcessBtn').addEventListener('click', async () => {
     if (!sourceContent) { toast("❌ No source loaded — link a file first"); return; }
-    let text;
-    try { text = await navigator.clipboard.readText(); }
+    let text = "";
+    try { 
+      // 1. Detect custom UrlHud Android Bridge
+      if (window.AndroidClipboard && typeof window.AndroidClipboard.read === 'function') {
+        text = window.AndroidClipboard.read();
+      } 
+      // 2. Fall back to standard browser API
+      else {
+        text = await navigator.clipboard.readText(); 
+      }
+    }
     catch (err) { toast("❌ Couldn't read clipboard — copy the patch from Claude first"); return; }
 
     if (!text || !text.trim()) { toast("⚠️ Clipboard is empty"); return; }
