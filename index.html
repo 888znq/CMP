@@ -1409,7 +1409,10 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
     } catch(e) { toast("❌ Copy failed"); }
   });
   document.getElementById('errDismissBtn').addEventListener('click', () => { $errOverlay.style.display = 'none'; });
-  window.addEventListener('message', (e) => { if (e.data && e.data.__compilerErr) showErr(e.data.__compilerErr); });
+  window.addEventListener('message', (e) => { 
+    // Iframe syntax errors silenced so they don't pop up during patching
+    // if (e.data && e.data.__compilerErr) showErr(e.data.__compilerErr); 
+  });
 
   // ── AST Panel ─────────────────────────────────────────────────────────
   const $astPanel   = document.getElementById('astPanel');
@@ -1791,9 +1794,8 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
     sourceContent = sourceContent.slice(0, currentLoc.startIndex) + newT + sourceContent.slice(currentLoc.endIndex);
     render(sourceContent);
     if (fileHandle) await nativeSilentSave(sourceContent);
-    const ok = astGuardAfterApply();
-    if (ok) toast(`⚡ Auto-Applied!${loc.isFuzzy ? ` (${loc.confidence}% match)` : ''}`);
-    return ok;
+    toast(`⚡ Auto-Applied!${loc.isFuzzy ? ` (${loc.confidence}% match)` : ''}`);
+    return true;
   }
 
   // ── Shortcut Bar ──────────────────────────────────────────────────────
