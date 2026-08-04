@@ -1578,38 +1578,10 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
   }
 
   function astGuardAfterApply() {
-    if (isCodeMode) return true;
-    if (!sourceContent) return true;
-    const src = sourceContent;
-    const counts = { '{': 0, '(': 0, '[': 0 };
-    const cl = { '}': '{', ')': '(', ']': '[' };
-    var ins = false, ic = '', it = 0;
-    for (var i = 0; i < src.length; i++) {
-      const c = src[i];
-      if (ins) { if (c === '\\') { i++; continue; } if (c === ic) ins = false; continue; }
-      if (c === '`') { it = it ? 0 : 1; continue; }
-      if (it) continue;
-      if (c === '"' || c === "'") { ins = true; ic = c; continue; }
-      if (c === '/' && src[i+1] === '/') { while (i < src.length && src[i] !== '\n') i++; continue; }
-      if (counts[c] !== undefined) counts[c]++;
-      if (cl[c]) counts[cl[c]]--;
+    // AST Guard disabled per user request
+    if ($astPanel.style.display === 'block' && sourceContent) {
+      runASTCheck(sourceContent);
     }
-    const broken = Object.entries(counts).filter(([,v]) => v !== 0);
-    if (broken.length > 0) {
-      const msg = broken.map(([k,v]) => `'${k}' ${v>0?v+' unclosed':Math.abs(v)+' extra'}`).join(', ');
-      showErr(`AST Guard: ${msg} — auto-undoing`);
-      if (undoStack.length > 0) {
-        redoStack.push(sourceContent);
-        document.getElementById('redoBtn').disabled = false;
-        sourceContent = undoStack.pop();
-        if (undoStack.length === 0) document.getElementById('undoBtn').disabled = true;
-        render(sourceContent);
-        if (fileHandle) nativeSilentSave(sourceContent);
-        toast('🛡️ AST Guard: auto-undone!', 4000);
-      }
-      return false;
-    }
-    if ($astPanel.style.display === 'block') runASTCheck(sourceContent);
     return true;
   }
 
