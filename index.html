@@ -818,11 +818,12 @@ button.btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none !import
 
   // ── GitHub State (persisted to localStorage + Firebase Realtime DB) ──
   var ghToken       = '';
-  var ghUser        = '';
-  var ghBranch      = 'main';
-  var ghFilePath    = 'index.html';
-  var ghRepos       = [];
-  var ghCurrentRepo = '';
+    var ghUser        = '';
+    var ghBranch      = 'main';
+    var ghFilePath    = 'index.html';
+    var ghRepos       = [];
+    var ghCurrentRepo = '';
+    var ghRepoContentCache = {}; // repoName -> already-fetched file content, so switching tabs is instant
 
   function ghApplyCfg(cfg) {
     if (!cfg) return;
@@ -886,14 +887,14 @@ button.btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none !import
       btn.addEventListener('dragstart', (e) => { e.dataTransfer.setData('text/plain', r.name); e.dataTransfer.setData('sc-type', 'repo'); btn.style.opacity = '0.5'; });
       btn.addEventListener('dragend', () => { btn.style.opacity = ''; });
       btn.addEventListener('click', async () => {
-        bar.querySelectorAll('.repo-btn').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        ghRepos.forEach(x => x.isDefault = (x.name === r.name));
-        ghCurrentRepo = r.name;
-        document.getElementById('pushBtn').disabled = false;
-        ghSaveConfig();
-        await ghSyncFromRepo(r.name, false);
-      });
+              bar.querySelectorAll('.repo-btn').forEach(b => b.classList.remove('active'));
+              btn.classList.add('active');
+              ghRepos.forEach(x => x.isDefault = (x.name === r.name));
+              ghCurrentRepo = r.name;
+              document.getElementById('pushBtn').disabled = false;
+              ghSaveConfig();
+              await ghSwitchToRepo(r.name);
+            });
       bar.appendChild(btn);
     });
     document.getElementById('pushBtn').disabled = !ghCurrentRepo;
@@ -925,13 +926,14 @@ button.btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none !import
       list.appendChild(row);
     });
     list.querySelectorAll('input[type="checkbox"]').forEach(cb => {
-      cb.addEventListener('change', (e) => {
-        const idx = +e.target.dataset.idx;
-        ghRepos[idx].visible = e.target.checked;
-        ghSaveConfig();
-        ghBuildDropdown();
-      });
-    });
+          cb.addEventListener('change', (e) => {
+            const idx = +e.target.dataset.idx;
+            ghRepos[idx].visible = e.target.checked;
+            ghSaveConfig();
+            ghBuildDropdown();
+            ghPreloadAllRepos();
+          });
+        });
   }
   document.getElementById('repoVisBtn').addEventListener('click', () => {
     renderRepoVisList();
@@ -943,39 +945,63 @@ button.btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none !import
     document.getElementById('repoVisBtn').classList.remove('active');
   });
   document.getElementById('rvSelectAllBtn').addEventListener('click', () => {
-    ghRepos.forEach(r => r.visible = true);
-    ghSaveConfig(); ghBuildDropdown(); renderRepoVisList();
-    toast('☑ All repos shown in bottom bar');
-  });
+      ghRepos.forEach(r => r.visible = true);
+      ghSaveConfig(); ghBuildDropdown(); renderRepoVisList();
+      ghPreloadAllRepos();
+      toast('☑ All repos shown in bottom bar');
+    });
 
-  async function ghSyncFromRepo(repoName, silent) {
-    if (!ghToken || !repoName) return;
-    const branch = ghBranch || 'main';
-    const path   = ghFilePath || 'index.html';
-    const url    = `https://api.github.com/repos/${repoName}/contents/${path}?ref=${branch}`;
-    try {
-      if (!silent) toast('🔄 Syncing from GitHub…', 3000);
-      document.getElementById('statusLeft').textContent = `🔄 Syncing ${repoName}…`;
+  async function ghFetchRepoContent(repoName) {
+      const branch = ghBranch || 'main';
+      const path   = ghFilePath || 'index.html';
+      const url    = `https://api.github.com/repos/${repoName}/contents/${path}?ref=${branch}`;
       const res = await fetch(url, { headers: { Authorization: `token ${ghToken}`, Accept: 'application/vnd.github.v3+json' } });
       if (!res.ok) {
         const errData = await res.json().catch(()=>({}));
-        if (!silent) toast(`❌ Sync failed: ${errData.message || res.status}`);
-        document.getElementById('statusLeft').textContent = `❌ Sync failed (${res.status})`;
-        return;
+        throw new Error(errData.message || `Sync failed (${res.status})`);
       }
       const data = await res.json();
       const binary = atob(data.content.replace(/\s/g, ''));
       const bytes = new Uint8Array(binary.length);
       for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-      sourceContent = new TextDecoder('utf-8').decode(bytes);
-      render(sourceContent);
-      document.getElementById('statusLeft').textContent = `✅ Synced: ${repoName}`;
-      if (!silent) toast(`✅ Loaded ${path} from ${repoName}`);
-    } catch(e) {
-      if (!silent) toast('❌ Sync error: ' + e.message);
-      document.getElementById('statusLeft').textContent = '❌ Sync error';
+      return new TextDecoder('utf-8').decode(bytes);
     }
-  }
+    async function ghSyncFromRepo(repoName, silent) {
+      if (!ghToken || !repoName) return;
+      try {
+        if (!silent) toast('🔄 Syncing from GitHub…', 3000);
+        document.getElementById('statusLeft').textContent = `🔄 Syncing ${repoName}…`;
+        const content = await ghFetchRepoContent(repoName);
+        ghRepoContentCache[repoName] = content;
+        sourceContent = content;
+        render(sourceContent);
+        document.getElementById('statusLeft').textContent = `✅ Synced: ${repoName}`;
+        if (!silent) toast(`✅ Loaded ${ghFilePath || 'index.html'} from ${repoName}`);
+      } catch(e) {
+        if (!silent) toast('❌ Sync error: ' + e.message);
+        document.getElementById('statusLeft').textContent = '❌ Sync error';
+      }
+    }
+    async function ghSwitchToRepo(repoName) {
+      if (Object.prototype.hasOwnProperty.call(ghRepoContentCache, repoName)) {
+        sourceContent = ghRepoContentCache[repoName];
+        render(sourceContent);
+        document.getElementById('statusLeft').textContent = `✅ Switched: ${repoName} (cached)`;
+        return;
+      }
+      await ghSyncFromRepo(repoName, false);
+    }
+    async function ghPreloadAllRepos() {
+      if (!ghToken) return;
+      const visibleRepos = ghRepos.filter(r => r.visible !== false);
+      for (const r of visibleRepos) {
+        if (Object.prototype.hasOwnProperty.call(ghRepoContentCache, r.name)) continue;
+        try {
+          const content = await ghFetchRepoContent(r.name);
+          ghRepoContentCache[r.name] = content;
+        } catch(e) { /* leave uncached — will fetch on demand when the tab is clicked */ }
+      }
+    }
   async function ghFetchAllRepos() {
     if (!ghToken || !ghUser) return;
     try {
@@ -1120,10 +1146,11 @@ button.btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none !import
         body: JSON.stringify(body)
       });
       if (res.ok) {
-        const data = await res.json();
-        document.getElementById('statusLeft').textContent = `✅ Pushed to ${repo}`;
-        toast(`✅ Pushed! SHA: ${data.content?.sha?.slice(0,7) || 'ok'}`);
-      } else {
+              const data = await res.json();
+              ghRepoContentCache[repo] = sourceContent;
+              document.getElementById('statusLeft').textContent = `✅ Pushed to ${repo}`;
+              toast(`✅ Pushed! SHA: ${data.content?.sha?.slice(0,7) || 'ok'}`);
+            } else {
         const err = await res.json().catch(()=>({}));
         document.getElementById('statusLeft').textContent = `❌ Push failed`;
         toast(`❌ Push failed: ${err.message || res.status}`);
@@ -1347,17 +1374,18 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
     ghBuildDropdown();
 
     const defaultRepo = ghRepos.find(r => r.isDefault) || ghRepos[0];
-    const repoToSync  = defaultRepo ? defaultRepo.name : '';
-    if (repoToSync && ghToken) {
-      ghCurrentRepo = repoToSync;
-      document.getElementById('pushBtn').disabled = false;
-      await ghSyncFromRepo(repoToSync, false);
-    } else {
-      const saved = localStorage.getItem('aicompiler_source');
-      if (saved && !sourceContent) { sourceContent = saved; render(sourceContent); toast("💾 Restored previous session"); }
-    }
-
-    if (ghToken && ghUser) ghSyncRepoList();
+        const repoToSync  = defaultRepo ? defaultRepo.name : '';
+        if (repoToSync && ghToken) {
+          ghCurrentRepo = repoToSync;
+          document.getElementById('pushBtn').disabled = false;
+          await ghSyncFromRepo(repoToSync, false);
+          ghPreloadAllRepos();
+        } else {
+          const saved = localStorage.getItem('aicompiler_source');
+          if (saved && !sourceContent) { sourceContent = saved; render(sourceContent); toast("💾 Restored previous session"); }
+        }
+    
+        if (ghToken && ghUser) ghSyncRepoList().then(() => ghPreloadAllRepos());
   });
 
   // ── Patch Status Indicator ──────────────────────────────────────────────
@@ -1856,16 +1884,16 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
         btn.classList.add('active');
         const ghMatch = sc.url.match(/^https:\/\/github\.com\/([^/]+)\/([^/]+?)(?:\.git)?(?:\/.*)?\/?$/);
         if (ghMatch) {
-          const repoName = `${ghMatch[1]}/${ghMatch[2]}`;
-          document.querySelectorAll('#repoBar .repo-btn').forEach(b => b.classList.remove('active'));
-          const matchingRepo = [...document.querySelectorAll('#repoBar .repo-btn')].find(b => b.title.startsWith(repoName));
-          if (matchingRepo) matchingRepo.classList.add('active');
-          ghRepos.forEach(x => x.isDefault = (x.name === repoName));
-          ghCurrentRepo = repoName;
-          document.getElementById('pushBtn').disabled = false;
-          ghSaveConfig();
-          await ghSyncFromRepo(repoName, false);
-        } else { window.open(sc.url, '_blank'); setTimeout(() => btn.classList.remove('active'), 800); }
+                  const repoName = `${ghMatch[1]}/${ghMatch[2]}`;
+                  document.querySelectorAll('#repoBar .repo-btn').forEach(b => b.classList.remove('active'));
+                  const matchingRepo = [...document.querySelectorAll('#repoBar .repo-btn')].find(b => b.title.startsWith(repoName));
+                  if (matchingRepo) matchingRepo.classList.add('active');
+                  ghRepos.forEach(x => x.isDefault = (x.name === repoName));
+                  ghCurrentRepo = repoName;
+                  document.getElementById('pushBtn').disabled = false;
+                  ghSaveConfig();
+                  await ghSwitchToRepo(repoName);
+                } else { window.open(sc.url, '_blank'); setTimeout(() => btn.classList.remove('active'), 800); }
       });
       wrap.appendChild(btn);
       if (!scLocked) {
