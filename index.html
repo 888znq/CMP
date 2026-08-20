@@ -1304,13 +1304,6 @@ button.btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none !import
   // ── Super Prompt ──────────────────────────────────────────────────────
   const SUPER_PROMPT = `[Give me the results as Combined Find-and-Replace blocks. Put the old code and the new code inside a single code block separated by exactly ===SPLIT=== on its own line so I only have to click 'copy' once. 
 (Note: This works for ANY language. Ignore JS-specific scope rules if not applicable.)
-
-CRITICAL RULES FOR THE "OLD" BLOCK:
-1. It MUST be an EXACT, character-for-character copy of the original code.
-2. Do NOT change spaces, indentation, or line breaks.
-3. Do NOT use ellipses (...) or comments to skip code. 
-4. You MUST include at least 4-5 lines of unchanged context BEFORE and AFTER the actual modification. This provides a massive, unique fingerprint for the auto-patcher to lock onto safely.
-
 The 11 Surgery Scenarios You Must Handle:
 Scenario 1 (The Swap): Just changing one value or line for another.
 Scenario 2 (The Excision): Deleting code while keeping the rest of the file clean.
@@ -1323,9 +1316,8 @@ Scenario 8 (The Database Bump): Updating saved data settings so the app doesn't 
 Scenario 9 (The Link Shift): Changing where the app connects to (APIs, URLs, or Tokens).
 Scenario 10 (The Sync): If you change the "Brain" (Web Worker), you must also fix the "Body" (Main Script).
 Scenario 11 (The Layer Fix): Fixing UI issues where things are hidden or unclickable.
-
 If any variable is declared with const or let inside a function or block that gets re-executed, move the declaration outside to the top of the script or convert it to var. Never declare the same identifier twice in the same scope.
-Response must contain ONLY the code blocks. No warnings, no error messages, no annotations.
+response must contain ONLY the code blocks. No warnings, no error messages, no annotations.
 If you have a concern about the existing code, state it in plain text BEFORE the code block — never inside it.
 Before you give me the solution, double-check that you haven't left any brackets } or parentheses ) unclosed.
 For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLOCK=== so I can batch-apply all at once with one copy.]
