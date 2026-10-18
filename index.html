@@ -648,6 +648,7 @@ button.btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none !import
             <label title="Lite: send only the relevant parts of a big file"><input type="checkbox" id="incLite" checked></label>
     </div>
     <button id="payloadBtn" class="btn" style="border-color:#ffffff;color:#ffffff;" title="Build &amp; copy payload">▲</button>
+    <button id="scanBtn" class="btn" style="border-color:#ffffff;color:#ffffff;" title="Scan the whole file for the text in the instruction box and copy a report">🔍</button>
     <button id="pasteAndProcessBtn" class="btn" style="border-color:#ffffff;color:#ffffff;" title="Read clipboard now and apply the patch (supports OLD===SPLIT===NEW and ===BLOCK=== formats)">&#x2318;</button>
     <button id="pushBtn" disabled title="Commit &amp; Push to GitHub">&#x2191;</button>
     <button id="promptBtn" class="btn" style="display:none;border-color:#ffffff;color:#ffffff;" title="Copy super-prompt">&#x2605;</button>
@@ -1467,10 +1468,11 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
       }
       chunks.push({ n: c + 1, s: s + 1, e: e, t: t, low: t.toLowerCase(), names: names });
     }
+    window._liteChunks = chunks;
     var tags = (instr.match(/@[\w$-]+/g) || []).map(function (x) { return x.slice(1).toLowerCase(); });
     var forced = {}, scores = {};
     chunks.forEach(function (ch) {
-      if (ch.names.some(function (x) { return tags.indexOf(x.toLowerCase()) >= 0; })) forced[ch.n] = 1;
+      if (tags.indexOf('part' + ch.n) >= 0 || tags.indexOf('p' + ch.n) >= 0 || ch.names.some(function (x) { return tags.indexOf(x.toLowerCase()) >= 0; })) forced[ch.n] = 1;
     });
     var stop = 'the and for with that this from into make change please then when also should would could just have are was but you your its all any can will get need want'.split(' ');
     var words = (instr.replace(/@[\w$-]+/g, ' ').toLowerCase().match(/[a-z0-9_$#.\-]{3,}/g) || []).filter(function (w, k, a) {
@@ -1498,6 +1500,78 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
     out.push('=== OTHER PARTS (names only) ===\n' + rest.join('\n'));
     return out.join('\n\n');
   }
+  
+  function scanFileForTerms() {
+    var instr = document.getElementById('aiInstruction').value.trim();
+    if (!sourceContent) { toast("❌ No source loaded"); return; }
+    if (!instr) { toast("⚠️ Type what to find in the instruction box first"); return; }
+    var esc = function (s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); };
+    var pats = [], labels = [];
+    (instr.match(/#[0-9a-f]{3,8}\b/gi) || []).forEach(function (h) {
+      var hex = h.slice(1);
+      pats.push('(?:^|[^0-9a-f])' + esc(hex) + '(?![0-9a-f])');
+      labels.push(h);
+      if (hex.length === 6) {
+        var r = parseInt(hex.slice(0, 2), 16), g = parseInt(hex.slice(2, 4), 16), b = parseInt(hex.slice(4, 6), 16);
+        pats.push('(?:^|[^0-9])' + r + '\\s*,\\s*' + g + '\\s*,\\s*' + b + '(?![0-9])');
+        labels.push('rgb(' + r + ',' + g + ',' + b + ')');
+      }
+    });
+    if (!pats.length) {
+      (instr.match(/`[^`]+`|"[^"]+"|'[^']+'/g) || []).forEach(function (q) {
+        pats.push(esc(q.slice(1, -1)));
+        labels.push(q.slice(1, -1));
+      });
+    }
+    if (!pats.length) { pats.push(esc(instr)); labels.push(instr); }
+    var re;
+    try { re = new RegExp(pats.join('|'), 'gi'); } catch (e) { toast("❌ Bad search term"); return; }
+    window._liteChunks = null;
+    liteSource(sourceContent, '');
+    var chunks = window._liteChunks;
+    var report;
+    if (!chunks) {
+      report = 'SCAN REPORT\nFile is under 400 lines, so Lite mode sends it whole. No tags needed.';
+    } else {
+      var hits = [], total = 0;
+      chunks.forEach(function (ch) {
+        var cnt = 0, lns = [], m;
+        re.lastIndex = 0;
+        while ((m = re.exec(ch.t)) !== null) {
+          cnt++;
+          var ln = ch.s + ch.t.slice(0, m.index + m[0].length - 1).split('\n').length - 1;
+          if (lns.length < 8 && lns.indexOf(ln) < 0) lns.push(ln);
+        }
+        if (cnt) { total += cnt; hits.push({ ch: ch, cnt: cnt, lns: lns }); }
+      });
+      var out = [
+        'SCAN REPORT',
+        'Searched: ' + labels.join('  |  '),
+        'File: ' + sourceContent.split('\n').length + ' lines, ' + chunks.length + ' parts',
+        'Found ' + total + ' matches in ' + hits.length + ' parts:',
+        ''
+      ];
+      hits.forEach(function (h) {
+        out.push('PART ' + h.ch.n + ' (L' + h.ch.s + '-' + h.ch.e + ') x' + h.cnt +
+          (h.ch.names.length ? ' [' + h.ch.names.slice(0, 3).join(', ') + ']' : '') +
+          ' lines: ' + h.lns.join(', '));
+      });
+      if (hits.length) {
+        out.push('', 'TAGS: ' + hits.map(function (h) { return '@part' + h.ch.n; }).join(' '));
+      } else {
+        out.push('No literal matches found.');
+      }
+      report = out.join('\n');
+    }
+    isInternalCopy = true;
+    lastClip = report;
+    navigator.clipboard.writeText(report).then(function () {
+      toast("🔍 Scan report copied — paste it to Claude");
+      document.getElementById('statusLeft').textContent = '🔍 Scan report copied';
+    }, function () { toast("❌ Failed to copy report"); });
+    setTimeout(function () { isInternalCopy = false; }, 1500);
+  }
+  document.getElementById('scanBtn').addEventListener('click', scanFileForTerms);
   
   document.getElementById('payloadBtn').addEventListener('click', async () => {
     const instruction = document.getElementById('aiInstruction').value.trim();
