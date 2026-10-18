@@ -645,6 +645,7 @@ button.btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none !import
       <label title="Include the base system prompt"><input type="checkbox" id="incSuperPrompt" checked></label>
       <label title="Include your typed instructions"><input type="checkbox" id="incInstructions" checked></label>
       <label title="Include the current source code"><input type="checkbox" id="incSource" checked></label>
+            <label title="Lite: send only the relevant parts of a big file"><input type="checkbox" id="incLite" checked></label>
     </div>
     <button id="payloadBtn" class="btn" style="border-color:#ffffff;color:#ffffff;" title="Build &amp; copy payload">▲</button>
     <button id="pasteAndProcessBtn" class="btn" style="border-color:#ffffff;color:#ffffff;" title="Read clipboard now and apply the patch (supports OLD===SPLIT===NEW and ===BLOCK=== formats)">&#x2318;</button>
@@ -1444,6 +1445,60 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
   })();
 
   // ── Payload Button — builds prompt and copies it to clipboard ─────────
+  function liteSource(src, instr) {
+    var L = src.split('\n'), N = L.length;
+    if (N < 400) return src;
+    var bound = new RegExp('^\\s*(<scr' + 'ipt\\b|<sty' + 'le\\b|<!' + '--|(async\\s+)?function\\s+\\w|class\\s+\\w|(const|let|var)\\s+\\w+\\s*=\\s*(async\\s*)?(function\\b|\\([^)]*\\)\\s*=>))');
+    var closeTag = new RegExp('<\\/(script|style)>\\s*$');
+    var cuts = [0], st = 0, i, c;
+    for (i = 1; i < N; i++) {
+      var len = i - st;
+      if (((bound.test(L[i]) || closeTag.test(L[i - 1])) && len >= 40) || len >= 150) { cuts.push(i); st = i; }
+    }
+    var nameRe = /function\s*\*?\s*([A-Za-z_$][\w$]*)\s*\(|(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?(?:function\b|\([^)]*\)\s*=>)|id="([^"]+)"/g;
+    var chunks = [];
+    for (c = 0; c < cuts.length; c++) {
+      var s = cuts[c], e = (c + 1 < cuts.length) ? cuts[c + 1] : N;
+      var t = L.slice(s, e).join('\n'), names = [], m;
+      nameRe.lastIndex = 0;
+      while ((m = nameRe.exec(t)) && names.length < 10) {
+        var nm = m[1] || m[2] || m[3];
+        if (nm && names.indexOf(nm) < 0) names.push(nm);
+      }
+      chunks.push({ n: c + 1, s: s + 1, e: e, t: t, low: t.toLowerCase(), names: names });
+    }
+    var tags = (instr.match(/@[\w$-]+/g) || []).map(function (x) { return x.slice(1).toLowerCase(); });
+    var forced = {}, scores = {};
+    chunks.forEach(function (ch) {
+      if (ch.names.some(function (x) { return tags.indexOf(x.toLowerCase()) >= 0; })) forced[ch.n] = 1;
+    });
+    var stop = 'the and for with that this from into make change please then when also should would could just have are was but you your its all any can will get need want'.split(' ');
+    var words = (instr.replace(/@[\w$-]+/g, ' ').toLowerCase().match(/[a-z0-9_$#.\-]{3,}/g) || []).filter(function (w, k, a) {
+      return a.indexOf(w) === k && stop.indexOf(w) < 0;
+    });
+    words.forEach(function (w) {
+      var hit = chunks.filter(function (ch) { return ch.low.indexOf(w) >= 0; });
+      if (!hit.length || hit.length > chunks.length * 0.25) return;
+      hit.forEach(function (ch) {
+        scores[ch.n] = (scores[ch.n] || 0) + Math.min(ch.low.split(w).length - 1, 5) / hit.length;
+      });
+    });
+    var rank = chunks.filter(function (ch) { return !forced[ch.n] && scores[ch.n] > 0; })
+      .sort(function (a, b) { return scores[b.n] - scores[a.n]; }).slice(0, 4);
+    var sel = Object.keys(forced).map(Number).concat(rank.map(function (ch) { return ch.n; }))
+      .sort(function (a, b) { return a - b; });
+    var out = ['[LITE MODE: the file has ' + N + ' lines and only the relevant parts are shown below. Reply with OLD===SPLIT===NEW blocks whose OLD text is copied exactly from these parts and is unique in the whole file (include a few surrounding lines). If you need a part that is not shown, reply in plain text with only its name from the list, like @functionName.]'];
+    if (!sel.length) out.push('(No part matched the instruction. Name one with @name.)');
+    sel.forEach(function (n) {
+      var ch = chunks[n - 1];
+      out.push('=== PART ' + n + ' (lines ' + ch.s + '-' + ch.e + ') ===\n' + ch.t);
+    });
+    var rest = chunks.filter(function (ch) { return sel.indexOf(ch.n) < 0 && ch.names.length; })
+      .slice(0, 300).map(function (ch) { return ch.n + ' L' + ch.s + '-' + ch.e + ': ' + ch.names.slice(0, 5).join(', '); });
+    out.push('=== OTHER PARTS (names only) ===\n' + rest.join('\n'));
+    return out.join('\n\n');
+  }
+  
   document.getElementById('payloadBtn').addEventListener('click', async () => {
     const instruction = document.getElementById('aiInstruction').value.trim();
     const wantSuper = document.getElementById('incSuperPrompt').checked;
@@ -1453,7 +1508,10 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
     var parts = [];
     if (wantSuper) parts.push(SUPER_PROMPT);
     if (wantInstr && instruction) parts.push(instruction);
-    if (wantSource) parts.push(sourceContent ? sourceContent : "(No source loaded)");
+    if (wantSource) {
+          var liteBox = document.getElementById('incLite');
+          parts.push(sourceContent ? ((liteBox && liteBox.checked) ? liteSource(sourceContent, instruction) : sourceContent) : "(No source loaded)");
+        }
 
     if (parts.length === 0) {
       toast("⚠️ Nothing selected — check at least one box");
