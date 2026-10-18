@@ -649,6 +649,7 @@ button.btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none !import
     </div>
     <button id="payloadBtn" class="btn" style="border-color:#ffffff;color:#ffffff;" title="Build &amp; copy payload">▲</button>
     <button id="scanBtn" class="btn" style="border-color:#ffffff;color:#ffffff;" title="Scan the whole file for the text in the instruction box and copy a report">🔍</button>
+    <button id="replaceAllBtn" class="btn" style="border-color:#ffffff;color:#ffffff;" title="Replace everywhere: type  old => new  in the instruction box">🔁</button>
     <button id="tagsBtn" class="btn" style="border-color:#ffffff;color:#ffffff;" title="Copy Claude's reply first, then press: adds its @tags to the instruction box">📎</button>
     <button id="pasteAndProcessBtn" class="btn" style="border-color:#ffffff;color:#ffffff;" title="Read clipboard now and apply the patch (supports OLD===SPLIT===NEW and ===BLOCK=== formats)">&#x2318;</button>
     <button id="pushBtn" disabled title="Commit &amp; Push to GitHub">&#x2191;</button>
@@ -1447,6 +1448,33 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
   })();
 
   // ── Payload Button — builds prompt and copies it to clipboard ─────────
+  function liteIndex(src, instr) {
+    window._liteChunks = null;
+    liteSource(src, '');
+    var chunks = window._liteChunks;
+    if (!chunks) return src;
+    var stop = 'the and for with that this from into make change please then when also should would could just have are was but you your its all any can will get need want'.split(' ');
+    var words = (instr.replace(/@[\w$-]+/g, ' ').toLowerCase().match(/[a-z0-9_$#.\-]{3,}/g) || []).filter(function (w, k, a) {
+      return a.indexOf(w) === k && stop.indexOf(w) < 0;
+    });
+    var hitInfo = {};
+    words.forEach(function (w) {
+      var hit = chunks.filter(function (ch) { return ch.low.indexOf(w) >= 0; });
+      if (!hit.length || hit.length > chunks.length * 0.25) return;
+      hit.forEach(function (ch) { (hitInfo[ch.n] = hitInfo[ch.n] || []).push(w); });
+    });
+    var lines = chunks.map(function (ch) {
+      var label = ch.names.slice(0, 8).join(', ');
+      if (!label) {
+        var first = ch.t.split('\n').map(function (x) { return x.trim(); }).filter(Boolean)[0] || '';
+        label = '(' + first.slice(0, 60) + ')';
+      }
+      var h = hitInfo[ch.n];
+      return 'PART ' + ch.n + ' L' + ch.s + '-' + ch.e + ': ' + label + (h ? '  <<MATCH: ' + h.slice(0, 4).join(', ') + '>>' : '');
+    });
+    return '[INDEX MODE: No code is attached on purpose. The request is the text above. Reply in plain text with ONE line only: the request copied exactly, followed by @partN tags for every part you must see to write the patch (parts marked MATCH contain words from the request). Pick as few parts as possible, but include every part where the edit or its dependencies live. Do not write any patch yet.]\n\n=== PARTS (' + chunks.length + ' total, file has ' + src.split('\n').length + ' lines) ===\n' + lines.join('\n');
+  }
+  
   function liteSource(src, instr) {
     var L = src.split('\n'), N = L.length;
     if (N < 400) return src;
@@ -1490,6 +1518,7 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
       .sort(function (a, b) { return scores[b.n] - scores[a.n]; });
       var used = 0, budget = 60000;
       Object.keys(forced).forEach(function (k) { used += chunks[k - 1].t.length; });
+      if (Object.keys(forced).length) rank = [];
       rank = rank.filter(function (ch) {
         if (used + ch.t.length > budget) return false;
         used += ch.t.length;
@@ -1581,6 +1610,63 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
   }
   document.getElementById('scanBtn').addEventListener('click', scanFileForTerms);
   
+  function replaceEverywhere() {
+    var instr = document.getElementById('aiInstruction').value;
+    var halves = instr.split('=>');
+    if (halves.length !== 2) { toast("⚠️ Type it like:  old => new"); return; }
+    var from = halves[0].trim(), to = halves[1].trim();
+    if (!from) { toast("⚠️ Nothing to find before =>"); return; }
+    if (!sourceContent) { toast("❌ No source loaded"); return; }
+    var esc = function (s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); };
+    var count = 0;
+    var out = sourceContent.replace(new RegExp(esc(from), 'gi'), function () { count++; return to; });
+    var hf = from.match(/^#([0-9a-f]{6})$/i);
+    var ht = to.match(/^#([0-9a-f]{6})$/i);
+    if (hf && ht) {
+      var f = [0, 2, 4].map(function (i) { return parseInt(hf[1].substr(i, 2), 16); });
+      var t = [0, 2, 4].map(function (i) { return parseInt(ht[1].substr(i, 2), 16); });
+      var re = new RegExp('(rgba?\\(\\s*)' + f[0] + '\\s*,\\s*' + f[1] + '\\s*,\\s*' + f[2] + '(?![0-9])', 'gi');
+      out = out.replace(re, function (all, pre) { count++; return pre + t[0] + ',' + t[1] + ',' + t[2]; });
+    }
+    if (!count) { toast("ℹ No matches found for: " + from); return; }
+    pushState();
+    sourceContent = out;
+    render(sourceContent);
+    if (fileHandle) nativeSilentSave(sourceContent);
+    document.getElementById('statusLeft').textContent = '🔁 Replaced ' + count + ' matches';
+    toast("🔁 Replaced " + count + " matches — ↶ to undo");
+  }
+  document.getElementById('replaceAllBtn').addEventListener('click', replaceEverywhere);
+  
+  async function autoAddTagsFromClipboard() {
+    try {
+      var text = '';
+      if (window.AndroidClipboard && typeof window.AndroidClipboard.read === 'function') {
+        text = window.AndroidClipboard.read();
+      } else {
+        text = await navigator.clipboard.readText();
+      }
+      if (!text || text.length > 4000 || text.indexOf('===SPLIT===') >= 0 || text.indexOf('LITE MODE') >= 0 || text.indexOf('INDEX MODE') >= 0) return;
+      var found = text.match(/@[\w$-]+/g) || [];
+      if (!found.length) return;
+      if (!window._liteChunks && sourceContent) liteSource(sourceContent, '');
+      var known = {};
+      (window._liteChunks || []).forEach(function (ch) {
+        known['part' + ch.n] = 1;
+        known['p' + ch.n] = 1;
+        ch.names.forEach(function (x) { known[x.toLowerCase()] = 1; });
+      });
+      var box = document.getElementById('aiInstruction');
+      var have = (box.value.match(/@[\w$-]+/g) || []).map(function (x) { return x.toLowerCase(); });
+      var add = found.filter(function (t, i) {
+        return found.indexOf(t) === i && known[t.slice(1).toLowerCase()] === 1 && have.indexOf(t.toLowerCase()) < 0;
+      });
+      if (!add.length) return;
+      box.value = (box.value.trim() + ' ' + add.join(' ')).trim();
+      toast("📎 Auto-added " + add.length + " tag(s) from clipboard");
+    } catch (err) {}
+  }
+  
   document.getElementById('tagsBtn').addEventListener('click', async function () {
     var text = '';
     try {
@@ -1603,17 +1689,23 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
   });
   
   document.getElementById('payloadBtn').addEventListener('click', async () => {
+    await autoAddTagsFromClipboard();
     const instruction = document.getElementById('aiInstruction').value.trim();
     const wantSuper = document.getElementById('incSuperPrompt').checked;
     const wantInstr = document.getElementById('incInstructions').checked;
     const wantSource = document.getElementById('incSource').checked;
 
     var parts = [];
-    if (wantSuper) parts.push(SUPER_PROMPT);
+    var _tg = (instruction.match(/@[\w$-]+/g) || []).map(function (x) { return x.slice(1).toLowerCase(); });
+    var _auto = _tg.indexOf('auto') >= 0;
+    var _hasTags = _tg.filter(function (x) { return x !== 'auto'; }).length > 0;
+    var _lb = document.getElementById('incLite');
+    var _idx = !!(wantSource && wantInstr && instruction && _lb && _lb.checked && sourceContent && sourceContent.split('\n').length >= 400 && !_hasTags && !_auto);
+    if (wantSuper && !_idx) parts.push(SUPER_PROMPT);
     if (wantInstr && instruction) parts.push(instruction);
     if (wantSource) {
           var liteBox = document.getElementById('incLite');
-          parts.push(sourceContent ? ((liteBox && liteBox.checked) ? liteSource(sourceContent, instruction) : sourceContent) : "(No source loaded)");
+          parts.push(_idx ? liteIndex(sourceContent, instruction) : (sourceContent ? ((liteBox && liteBox.checked) ? liteSource(sourceContent, instruction) : sourceContent) : "(No source loaded)"));
         }
 
     if (parts.length === 0) {
@@ -1630,7 +1722,8 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
       lastClip = payload;
       await navigator.clipboard.writeText(payload);
       setTimeout(() => { isInternalCopy = false; }, 1500);
-      toast("🚀 Payload Copied! Paste it into Claude.");
+      toast(_idx ? "🧭 Index copied (no code) — paste to Claude, copy its reply, then press ▲" : "🚀 Payload Copied! Paste it into Claude.");
+      if (_hasTags || _auto) { var _bx = document.getElementById('aiInstruction'); _bx.value = _bx.value.replace(/\s*@[\w$-]+/g, '').trim(); }
       document.getElementById('statusLeft').textContent = '🚀 Payload copied — paste into Claude, then Copy its reply';
     } catch (err) { toast("❌ Failed to copy payload"); }
   });
