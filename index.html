@@ -649,6 +649,7 @@ button.btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none !import
     </div>
     <button id="payloadBtn" class="btn" style="border-color:#ffffff;color:#ffffff;" title="Build &amp; copy payload">▲</button>
     <button id="scanBtn" class="btn" style="border-color:#ffffff;color:#ffffff;" title="Scan the whole file for the text in the instruction box and copy a report">🔍</button>
+    <button id="tagsBtn" class="btn" style="border-color:#ffffff;color:#ffffff;" title="Copy Claude's reply first, then press: adds its @tags to the instruction box">📎</button>
     <button id="pasteAndProcessBtn" class="btn" style="border-color:#ffffff;color:#ffffff;" title="Read clipboard now and apply the patch (supports OLD===SPLIT===NEW and ===BLOCK=== formats)">&#x2318;</button>
     <button id="pushBtn" disabled title="Commit &amp; Push to GitHub">&#x2191;</button>
     <button id="promptBtn" class="btn" style="display:none;border-color:#ffffff;color:#ffffff;" title="Copy super-prompt">&#x2605;</button>
@@ -1486,7 +1487,14 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
       });
     });
     var rank = chunks.filter(function (ch) { return !forced[ch.n] && scores[ch.n] > 0; })
-      .sort(function (a, b) { return scores[b.n] - scores[a.n]; }).slice(0, 4);
+      .sort(function (a, b) { return scores[b.n] - scores[a.n]; });
+      var used = 0, budget = 60000;
+      Object.keys(forced).forEach(function (k) { used += chunks[k - 1].t.length; });
+      rank = rank.filter(function (ch) {
+        if (used + ch.t.length > budget) return false;
+        used += ch.t.length;
+        return true;
+      }).slice(0, 12);
     var sel = Object.keys(forced).map(Number).concat(rank.map(function (ch) { return ch.n; }))
       .sort(function (a, b) { return a - b; });
     var out = ['[LITE MODE: the file has ' + N + ' lines and only the relevant parts are shown below. Reply with OLD===SPLIT===NEW blocks whose OLD text is copied exactly from these parts and is unique in the whole file (include a few surrounding lines). If you need a part that is not shown, reply in plain text with only its name from the list, like @functionName.]'];
@@ -1572,6 +1580,27 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
     setTimeout(function () { isInternalCopy = false; }, 1500);
   }
   document.getElementById('scanBtn').addEventListener('click', scanFileForTerms);
+  
+  document.getElementById('tagsBtn').addEventListener('click', async function () {
+    var text = '';
+    try {
+      if (window.AndroidClipboard && typeof window.AndroidClipboard.read === 'function') {
+        text = window.AndroidClipboard.read();
+      } else {
+        text = await navigator.clipboard.readText();
+      }
+    } catch (err) { toast("❌ Couldn't read clipboard"); return; }
+    var found = text.match(/@[\w$-]+/g) || [];
+    if (!found.length) { toast("ℹ No @tags found in clipboard"); return; }
+    var box = document.getElementById('aiInstruction');
+    var have = (box.value.match(/@[\w$-]+/g) || []).map(function (x) { return x.toLowerCase(); });
+    var add = found.filter(function (t, i) {
+      return found.indexOf(t) === i && have.indexOf(t.toLowerCase()) < 0;
+    });
+    if (!add.length) { toast("ℹ Those tags are already in the box"); return; }
+    box.value = (box.value.trim() + ' ' + add.join(' ')).trim();
+    toast("📎 Added " + add.length + " tag(s) — press ▲");
+  });
   
   document.getElementById('payloadBtn').addEventListener('click', async () => {
     const instruction = document.getElementById('aiInstruction').value.trim();
