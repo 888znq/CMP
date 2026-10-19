@@ -624,6 +624,78 @@ button.btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none !import
 #bridgeIndicator.active { border-color: #ffffff; color: #ffffff; box-shadow: 0 0 8px #ffffff; }
 #bridgeIndicator.receiving { border-color: #ffffff; color: #ffffff; box-shadow: 0 0 8px #ffffff; }
 #bridgeIndicator.error { border-color: #ffffff; color: #ffffff; }
+
+/* ===== SIGPILL: BOTTOM BAR ===== */
+html body.compact-layout #controlBar{left:6px !important;right:auto !important;width:calc(100% - 12px) !important;padding:0 !important;gap:1.5px !important;align-items:stretch !important;background:#000432 !important;border:0 !important;border-radius:999px !important;overflow:hidden !important;box-shadow:none !important;}
+html body.compact-layout #controlBar #repoBar,
+html body.compact-layout #controlBar #bottom-controls,
+html body.compact-layout #controlBar #controls,
+html body.compact-layout #controlBar #git-controls{display:contents !important;}
+html body.compact-layout #controlBar .ctrl-sep{display:none !important;}
+
+/* every segment: flat, no borders, no white lines */
+html body.compact-layout #controlBar #repoBar .repo-btn,
+html body.compact-layout #controlBar .repo-bar-empty,
+html body.compact-layout #controlBar button,
+html body.compact-layout #controlBar select,
+html body.compact-layout #controlBar input.btn,
+html body.compact-layout #controlBar #payloadToggles{border:0 !important;border-radius:0 !important;box-shadow:none !important;outline:0 !important;margin:0 !important;height:auto !important;min-height:0 !important;max-height:none !important;align-self:stretch !important;box-sizing:border-box !important;color:#000432 !important;-webkit-text-fill-color:#000432 !important;text-shadow:none !important;font-weight:800 !important;opacity:1;}
+html body.compact-layout #controlBar #repoBar .repo-btn:hover,
+html body.compact-layout #controlBar button:hover,
+html body.compact-layout #controlBar select:hover{filter:brightness(1.15);color:#000432 !important;}
+html body.compact-layout #controlBar #pushBtn:disabled{opacity:.55 !important;}
+
+/* repo tabs: cycling colours */
+html body.compact-layout #controlBar #repoBar .repo-btn:nth-child(8n+1){background:#7eb8f7 !important;}
+html body.compact-layout #controlBar #repoBar .repo-btn:nth-child(8n+2){background:#7df5c0 !important;}
+html body.compact-layout #controlBar #repoBar .repo-btn:nth-child(8n+3){background:#f9a875 !important;}
+html body.compact-layout #controlBar #repoBar .repo-btn:nth-child(8n+4){background:#d47bff !important;}
+html body.compact-layout #controlBar #repoBar .repo-btn:nth-child(8n+5){background:#ff7b9c !important;}
+html body.compact-layout #controlBar #repoBar .repo-btn:nth-child(8n+6){background:#ffe066 !important;}
+html body.compact-layout #controlBar #repoBar .repo-btn:nth-child(8n+7){background:#6ef0f0 !important;}
+html body.compact-layout #controlBar #repoBar .repo-btn:nth-child(8n+0){background:#b5e88a !important;}
+html body.compact-layout #controlBar #repoBar .repo-bar-empty{background:#E2E8F0 !important;padding:0 10px !important;display:inline-flex;align-items:center;}
+html body.compact-layout #controlBar #repoBar .repo-btn::after{background:#000432 !important;box-shadow:none !important;}
+html body.compact-layout #controlBar #repoBar .repo-btn.active{filter:brightness(1.2) !important;box-shadow:inset 0 -3px 0 #000432 !important;}
+
+/* named segments */
+html body.compact-layout #controlBar #repoVisBtn{background:#ffe066 !important;}
+html body.compact-layout #controlBar #aiInstruction{background:#E2E8F0 !important;padding:0 10px !important;font-size:11px !important;}
+html body.compact-layout #controlBar #aiInstruction::placeholder{color:rgba(0,4,50,.55) !important;-webkit-text-fill-color:rgba(0,4,50,.55) !important;}
+html body.compact-layout #controlBar #payloadToggles{background:#7df5c0 !important;padding:0 8px !important;gap:5px !important;display:inline-flex;align-items:center;}
+html body.compact-layout #controlBar #payloadToggles label{color:#000432 !important;}
+html body.compact-layout #controlBar #payloadToggles input[type="checkbox"]{border:1.5px solid #000432 !important;background:transparent !important;border-radius:4px !important;}
+html body.compact-layout #controlBar #payloadToggles input[type="checkbox"]:checked::after{border-color:#000432 !important;}
+html body.compact-layout #controlBar #payloadBtn{background:#7eb8f7 !important;}
+html body.compact-layout #controlBar #scanBtn{background:#f9a875 !important;}
+html body.compact-layout #controlBar #replaceAllBtn{background:#d47bff !important;}
+html body.compact-layout #controlBar #tagsBtn{background:#ff7b9c !important;}
+html body.compact-layout #controlBar #pasteAndProcessBtn{background:#6ef0f0 !important;}
+html body.compact-layout #controlBar #pushBtn{background:#b5e88a !important;}
+html body.compact-layout #controlBar #aiSelector{background:#ffb347 !important;padding:0 8px !important;}
+html body.compact-layout #controlBar #clipHistory{background:#E2E8F0 !important;}
+html body.compact-layout #controlBar #undoBtn{background:#7eb8f7 !important;}
+html body.compact-layout #controlBar #redoBtn{background:#7df5c0 !important;}
+html body.compact-layout #controlBar #fileBtn{background:#f9a875 !important;}
+html body.compact-layout #controlBar #viewModeBtn{background:#d47bff !important;}
+html body.compact-layout #controlBar #ghSettingsBtn{background:#ff7b9c !important;}
+html body.compact-layout #controlBar #ghNewRepoBtn{background:#6ef0f0 !important;}
+
+/* ===== SIGPILL: BOTTOM BAR (layout fixes) ===== */
+html body.compact-layout #controlBar #repoBar{display:flex !important;flex:0 0 40% !important;width:40% !important;max-width:40% !important;height:auto !important;align-self:stretch !important;align-items:stretch !important;gap:1.5px !important;padding:0 !important;margin:0 !important;border:0 !important;background:transparent !important;overflow:hidden !important;backdrop-filter:none !important;}
+html body.compact-layout #controlBar #repoBar .repo-btn{flex:1 1 0 !important;min-width:0 !important;max-width:none !important;padding:0 6px !important;font-size:10px !important;letter-spacing:0.3px !important;display:inline-flex !important;align-items:center !important;justify-content:center !important;overflow:hidden !important;text-overflow:ellipsis !important;white-space:nowrap !important;}
+html body.compact-layout #controlBar #repoBar .repo-btn:first-child{padding-left:16px !important;}
+html body.compact-layout #controlBar #repoBar .repo-bar-empty{flex:1 1 0 !important;font-size:10px !important;}
+html body.compact-layout #controlBar #aiInstruction{flex:2 1 0 !important;width:auto !important;min-width:0 !important;}
+html body.compact-layout #controlBar #payloadBtn,
+html body.compact-layout #controlBar #pasteAndProcessBtn,
+html body.compact-layout #controlBar #pushBtn,
+html body.compact-layout #controlBar #ghNewRepoBtn,
+html body.compact-layout #controlBar #repoVisBtn{flex:0 0 auto !important;min-width:34px !important;padding:0 12px !important;font-size:14px !important;display:inline-flex !important;align-items:center !important;justify-content:center !important;}
+html body.compact-layout #controlBar #ghNewRepoBtn{padding:0 16px 0 12px !important;}
+html body.compact-layout #controlBar input:focus,
+html body.compact-layout #controlBar button:focus,
+html body.compact-layout #controlBar select:focus{outline:0 !important;box-shadow:none !important;border:0 !important;}
 </style>
 </head>
 <body class="compact-layout">
@@ -2231,4 +2303,5 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
 </script>
 </body>
 </html>
+​​​
 ​​​
