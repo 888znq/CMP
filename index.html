@@ -998,7 +998,11 @@ button.btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none !import
         }
       } catch (e) { if (e.message && e.message.indexOf('blob fetch') === 0) throw e; }
       render(sourceContent);
-      document.getElementById('statusLeft').textContent = `✅ Synced: ${repoName}`;
+      undoStack = []; redoStack = [];
+            document.getElementById('undoBtn').disabled = true;
+            document.getElementById('redoBtn').disabled = true;
+            window._loadedRepo = repoName;
+            document.getElementById('statusLeft').textContent = `✅ Synced: ${repoName}`;
       if (!silent) toast(`✅ Loaded ${path} from ${repoName}`);
     } catch(e) {
       if (!silent) toast('❌ Sync error: ' + e.message);
@@ -1110,6 +1114,7 @@ button.btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none !import
     if (!sourceContent) { toast('❌ Nothing to push — load content first'); return; }
     if (!ghToken)       { toast('❌ GitHub token not set — open ⚙ GH settings'); return; }
     if (!ghCurrentRepo) { toast('❌ No repo selected'); return; }
+        if (window._loadedRepo && window._loadedRepo !== ghCurrentRepo) { toast('🚫 Push blocked: the code loaded is from ' + window._loadedRepo + ', not ' + ghCurrentRepo + '. Re-tap the repo first.', 6000); return; }
     const ts = new Date().toISOString().replace('T',' ').slice(0,19);
     document.getElementById('commitMsgInput').value = `Update ${ghFilePath || 'index.html'} via AI Compile — ${ts}`;
     document.getElementById('commitModal').classList.add('open');
@@ -1405,7 +1410,7 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
   $codeView.addEventListener('input', (e) => {
     if (!isCodeMode) return;
     sourceContent = e.target.value;
-    localStorage.setItem('aicompiler_source', sourceContent);
+    try { localStorage.setItem('aicompiler_source', sourceContent); } catch (e) { try { localStorage.removeItem('aicompiler_source'); } catch (e2) {} }
     if (fileHandle) nativeSilentSave(sourceContent);
     updateStatusBar();
   });
@@ -1558,7 +1563,7 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
       out.push('=== PART ' + n + ' (lines ' + ch.s + '-' + ch.e + ') ===\n' + ch.t);
     });
     var rest = chunks.filter(function (ch) { return sel.indexOf(ch.n) < 0 && ch.names.length; })
-      .slice(0, 300).map(function (ch) { return ch.n + ' L' + ch.s + '-' + ch.e + ': ' + ch.names.slice(0, 5).join(', '); });
+      .slice(0, 1500).map(function (ch) { return ch.n + ' L' + ch.s + '-' + ch.e + ': ' + ch.names.slice(0, 5).join(', '); });
     out.push('=== OTHER PARTS (names only) ===\n' + rest.join('\n'));
     return out.join('\n\n');
   }
@@ -1787,6 +1792,19 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
       return;
     }
 
+    const MAX_LINE = 3000;
+    for (const b of blocks) {
+      let worst = 0;
+      (b.newCode || '').split('\n').forEach(function (l) { if (l.length > worst) worst = l.length; });
+      const hasB64 = /base64,[A-Za-z0-9+\/=]{2000,}/.test(b.newCode || '');
+      if (worst > MAX_LINE || hasB64) {
+        ind.textContent = '📋 Patch: Ready';
+        ind.className = '';
+        showErr('🚫🚫🚫 PATCH BLOCKED 🚫🚫🚫\n\n' + (hasB64 ? 'It contains an embedded base64 blob (image, font or data).' : 'It has a line of ' + worst + ' characters (limit ' + MAX_LINE + ').') + '\n\nVery long lines (minified code, base64, one-line JSON) cannot be split into parts, so the AI index cannot show or request them.\n\nNOTHING WAS CHANGED.\n\nFix: keep that data in a separate file, or ask the AI to put it in a normal multi-line format.');
+        toast('🚫 PATCH BLOCKED: line too long (' + worst + ' chars)', 8000);
+        return;
+      }
+    }
     let allOk = true;
     for (const block of blocks) {
       const ok = await autoLockAndApply(block);
@@ -1918,7 +1936,7 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
   function pushState() {
     if (sourceContent) {
       undoStack.push(sourceContent);
-      if (undoStack.length > 20) undoStack.shift();
+      if (undoStack.length > (sourceContent.length > 2000000 ? 5 : 20)) undoStack.shift();
       redoStack = [];
       document.getElementById('undoBtn').disabled = false;
       document.getElementById('redoBtn').disabled = true;
@@ -1949,7 +1967,11 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
   function render(src) {
     clearTimeout(renderTimer);
     renderTimer = setTimeout(() => {
-      localStorage.setItem('aicompiler_source', src);
+      try { localStorage.setItem('aicompiler_source', src); }
+            catch (e) {
+              try { localStorage.removeItem('aicompiler_source'); } catch (e2) {}
+              if (!window._lsWarned) { window._lsWarned = true; toast('⚠️ File too big for local backup — push to GitHub to save', 5000); }
+            }
       if (isCodeMode) {
         $codeView.value = src; flash(); updateStatusBar();
       } else {
@@ -1983,7 +2005,7 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
         undoStack = []; redoStack = [];
         document.getElementById('undoBtn').disabled = true;
         document.getElementById('redoBtn').disabled = true;
-        render(sourceContent); toast(`🔗 Linked & Loaded: ${file.name}`);
+        window._loadedRepo = null; render(sourceContent); toast(`🔗 Linked & Loaded: ${file.name}`);
         return;
       } catch (err) { return; /* user cancelled the picker */ }
     }
@@ -1998,7 +2020,7 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
       undoStack = []; redoStack = [];
       document.getElementById('undoBtn').disabled = true;
       document.getElementById('redoBtn').disabled = true;
-      render(sourceContent); toast(`🔗 Loaded: ${f.name} (in-memory only — push to GitHub to persist)`);
+      window._loadedRepo = null; render(sourceContent); toast(`🔗 Loaded: ${f.name} (in-memory only — push to GitHub to persist)`);
     };
     inp.click();
   });
@@ -2204,3 +2226,4 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
 </script>
 </body>
 </html>
+​​​
