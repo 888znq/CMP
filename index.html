@@ -985,6 +985,18 @@ button.btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none !import
         return;
       }
       sourceContent = await res.text();
+      try {
+        const meta = JSON.parse(sourceContent);
+        if (meta && meta.encoding === 'none' && meta.sha && meta.git_url) {
+          const br = await fetch(meta.git_url, { headers: { Authorization: `token ${ghToken}`, Accept: 'application/vnd.github+json' } });
+          if (!br.ok) throw new Error('blob fetch ' + br.status);
+          const bd = await br.json();
+          const bin = atob((bd.content || '').replace(/\s/g, ''));
+          const bytes = new Uint8Array(bin.length);
+          for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+          sourceContent = new TextDecoder('utf-8').decode(bytes);
+        }
+      } catch (e) { if (e.message && e.message.indexOf('blob fetch') === 0) throw e; }
       render(sourceContent);
       document.getElementById('statusLeft').textContent = `✅ Synced: ${repoName}`;
       if (!silent) toast(`✅ Loaded ${path} from ${repoName}`);
