@@ -966,18 +966,25 @@ button.btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none !import
     try {
       if (!silent) toast('🔄 Syncing from GitHub…', 3000);
       document.getElementById('statusLeft').textContent = `🔄 Syncing ${repoName}…`;
-      const res = await fetch(url, { headers: { Authorization: `token ${ghToken}`, Accept: 'application/vnd.github.v3+json' } });
+   const rawHdr = { Authorization: `token ${ghToken}`, Accept: 'application/vnd.github.raw+json' };
+      let res = await fetch(url, { headers: rawHdr });
+      if (res.status === 404) {
+        const info = await fetch(`https://api.github.com/repos/${repoName}`, { headers: { Authorization: `token ${ghToken}`, Accept: 'application/vnd.github.v3+json' } });
+        if (info.ok) {
+          const ri = await info.json();
+          if (ri.default_branch && ri.default_branch !== branch) {
+            res = await fetch(`https://api.github.com/repos/${repoName}/contents/${path}?ref=${ri.default_branch}`, { headers: rawHdr });
+          }
+        }
+      }
       if (!res.ok) {
         const errData = await res.json().catch(()=>({}));
-        if (!silent) toast(`❌ Sync failed: ${errData.message || res.status}`);
+        document.getElementById('pushBtn').disabled = true;
+        if (!silent) toast(`❌ ${repoName}: ${errData.message || res.status} (${path} @ ${branch})`, 6000);
         document.getElementById('statusLeft').textContent = `❌ Sync failed (${res.status})`;
         return;
       }
-      const data = await res.json();
-      const binary = atob(data.content.replace(/\s/g, ''));
-      const bytes = new Uint8Array(binary.length);
-      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-      sourceContent = new TextDecoder('utf-8').decode(bytes);
+      sourceContent = await res.text();
       render(sourceContent);
       document.getElementById('statusLeft').textContent = `✅ Synced: ${repoName}`;
       if (!silent) toast(`✅ Loaded ${path} from ${repoName}`);
