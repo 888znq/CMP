@@ -987,7 +987,12 @@ button.btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none !import
       sourceContent = await res.text();
       try {
         const meta = JSON.parse(sourceContent);
-        if (meta && meta.encoding === 'none' && meta.sha && meta.git_url) {
+        if (meta && meta.encoding === 'base64' && typeof meta.content === 'string' && meta.sha) {
+  const b64bin = atob(meta.content.replace(/\s/g, ''));
+  const b64bytes = new Uint8Array(b64bin.length);
+  for (let i = 0; i < b64bin.length; i++) b64bytes[i] = b64bin.charCodeAt(i);
+  sourceContent = new TextDecoder('utf-8').decode(b64bytes);
+} else if (meta && meta.encoding === 'none' && meta.sha && meta.git_url) {
           const br = await fetch(meta.git_url, { headers: { Authorization: `token ${ghToken}`, Accept: 'application/vnd.github+json' } });
           if (!br.ok) throw new Error('blob fetch ' + br.status);
           const bd = await br.json();
