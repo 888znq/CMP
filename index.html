@@ -1924,7 +1924,73 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
                     var row = mk('div', 'position:absolute;display:flex;gap:2px;pointer-events:auto;z-index:2;left:' + cx + 'px;top:' + cy + 'px;');
                     q.parts.forEach(function (p) {
                       var c = mk('span', 'cursor:pointer;font-size:9px;font-weight:800;line-height:13px;padding:0 5px;border-radius:999px;color:#000432;box-shadow:0 0 0 1px #000432;white-space:nowrap;user-select:none;-webkit-user-select:none;', '@part' + p.n);
-                      c.title = (p.css ? 'styles' : 'markup') + ' - ' +
+                      c.title = (p.css ? 'styles' : 'markup') + ' - tap to add/remove @part' + p.n;
+c.addEventListener('click', function (ev) { ev.stopPropagation(); toggleTag(p.n); });
+row.appendChild(c);
+pmChips.push({ el: c, n: p.n, css: p.css });
+});
+pmLayer.appendChild(row);
+});
+pmPaint();
+}
+
+function loadChunks() {
+window._liteChunks = null;
+liteSource(sourceContent, '');
+chunks = window._liteChunks || [];
+lastSrc = sourceContent;
+pmCssCache = {};
+pmInfoCache = {};
+pmSig = '';
+}
+
+var pmTimer = null;
+
+function pmSetMode(on) {
+pmUi = !!on;
+if (!ov || !pmLayer) return;
+ov.style.background = pmUi ? 'transparent' : '#000432';
+pmHead.style.background = '#000432';
+scroller.style.display = pmUi ? 'none' : 'block';
+pmHint.style.display = pmUi ? 'none' : 'block';
+pmLayer.style.display = pmUi ? 'block' : 'none';
+pmModeBtn.textContent = pmUi ? '☰' : '🖼';
+pmModeBtn.title = pmUi ? 'Switch to list view' : 'Switch to on-screen view';
+pmSig = '';
+if (pmUi) pmLayout();
+}
+
+function pmEnsure() {
+if (!ov) build();
+if (pmLayer) return;
+pmHead = ov.childNodes[0];
+pmHint = ov.childNodes[1];
+pmLayer = mk('div', 'position:absolute;left:0;top:0;right:0;bottom:0;pointer-events:none;overflow:hidden;display:none;');
+ov.appendChild(pmLayer);
+pmModeBtn = mk('button', 'background:#000432;color:#fff;border:1px solid #fff;border-radius:999px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;', '☰');
+pmModeBtn.addEventListener('click', function () { pmSetMode(!pmUi); });
+pmHead.insertBefore(pmModeBtn, countEl);
+}
+
+var _paint0 = paint;
+paint = function () { _paint0(); pmPaint(); };
+
+var _openMap0 = openMap;
+var _closeMap0 = closeMap;
+openMap = function () {
+_openMap0();
+if (!isOpen) return;
+pmEnsure();
+pmSetMode(pmUi);
+clearInterval(pmTimer);
+pmTimer = setInterval(pmLayout, 500);
+};
+closeMap = function () {
+clearInterval(pmTimer);
+_closeMap0();
+if (pmLayer) pmLayer.textContent = '';
+pmSig = '';
+};
     
         function fitBottom() {
           if (!ov) return;
