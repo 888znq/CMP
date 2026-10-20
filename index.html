@@ -729,6 +729,7 @@ html body.compact-layout #controlBar select:focus{outline:0 !important;box-shado
     <button id="scanBtn" class="btn" style="border-color:#ffffff;color:#ffffff;" title="Scan the whole file for the text in the instruction box and copy a report">🔍</button>
     <button id="replaceAllBtn" class="btn" style="border-color:#ffffff;color:#ffffff;" title="Replace everywhere: type  old => new  in the instruction box">🔁</button>
     <button id="tagsBtn" class="btn" style="border-color:#ffffff;color:#ffffff;" title="Copy Claude's reply first, then press: adds its @tags to the instruction box">📎</button>
+        <button id="partsBtn" class="btn" style="border-color:#ffffff;color:#ffffff;" title="Browse every @part: search, preview, copy tag or code, multi-select">🧩</button>
     <button id="pasteAndProcessBtn" class="btn" style="border-color:#ffffff;color:#ffffff;" title="Read clipboard now and apply the patch (supports OLD===SPLIT===NEW and ===BLOCK=== formats)">&#x2318;</button>
     <button id="pushBtn" disabled title="Commit &amp; Push to GitHub">&#x2191;</button>
     <button id="promptBtn" class="btn" style="display:none;border-color:#ffffff;color:#ffffff;" title="Copy super-prompt">&#x2605;</button>
@@ -1642,8 +1643,374 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
     var rest = chunks.filter(function (ch) { return sel.indexOf(ch.n) < 0 && ch.names.length; })
       .slice(0, 1500).map(function (ch) { return ch.n + ' L' + ch.s + '-' + ch.e + ': ' + ch.names.slice(0, 5).join(', '); });
     out.push('=== OTHER PARTS (names only) ===\n' + rest.join('\n'));
-    return out.join('\n\n');
-  }
+        return out.join('\n\n');
+      }
+    
+      // ── Parts Map: file shown as clickable @part headers; click = add/remove tag in the prompt box ──
+      (function initPartsMap() {
+        var tagsBtn = document.getElementById('tagsBtn');
+        var oldBtn = document.getElementById('partsBtn');
+        var $ins = document.getElementById('aiInstruction');
+        if (!tagsBtn || !tagsBtn.parentNode || !$ins) return;
+        if (oldBtn) oldBtn.style.display = 'none';
+    
+        var btn = document.createElement('button');
+        btn.id = 'partsMapBtn';
+        btn.className = 'btn';
+        btn.style.cssText = 'border-color:#ffffff;color:#ffffff;';
+        btn.title = 'Parts map: click any @part to add/remove it in the prompt box';
+        btn.textContent = '🧩';
+        tagsBtn.parentNode.insertBefore(btn, tagsBtn.nextSibling);
+    
+        var ov = null, scroller = null, searchEl = null, countEl = null;
+        var chunks = [], heads = [], isOpen = false, lastSrc = null, watch = null;
+    
+        function mk(tag, css, txt) {
+          var e = document.createElement(tag);
+          if (css) e.style.cssText = css;
+          if (txt !== undefined) e.textContent = txt;
+          return e;
+        }
+    
+        function tagRe(n) { return new RegExp('(^|\\s)@part' + n + '(?=\\s|$)'); }
+        function isOn(n) { return tagRe(n).test($ins.value); }
+    
+        function toggleTag(n) {
+          var v = $ins.value;
+          var re = tagRe(n);
+          if (re.test(v)) {
+            v = v.replace(re, '');
+          } else {
+            v = v + ((v && !/\s$/.test(v)) ? ' ' : '') + '@part' + n;
+          }
+          $ins.value = v;
+          $ins.dispatchEvent(new Event('input', { bubbles: true }));
+          paint();
+        }
+    
+        function dedent(text) {
+          var lines = text.split('\n'), min = 1e9, i, k;
+          for (i = 0; i < lines.length; i++) {
+            if (!lines[i].trim()) continue;
+            k = lines[i].match(/^[ \t]*/)[0].length;
+            if (k < min) min = k;
+          }
+          if (min === 1e9 || min === 0) return text;
+          return lines.map(function (x) { return x.slice(Math.min(min, x.length - x.replace(/^[ \t]+/, '').length)); }).join('\n');
+        }
+    
+        function labelOf(ch) {
+          var label = ch.names.slice(0, 8).join(', ');
+          if (!label) {
+            var first = ch.t.split('\n').map(function (x) { return x.trim(); }).filter(Boolean)[0] || '';
+            label = '(' + first.slice(0, 60) + ')';
+          }
+          return label;
+        }
+    
+        function previewOf(ch) {
+          var ls = ch.t.split('\n').filter(function (x) { return x.trim(); }).slice(0, 5);
+          var txt = dedent(ls.join('\n')).split('\n').map(function (x) { return x.length > 140 ? x.slice(0, 140) + '…' : x; }).join('\n');
+          return txt + '\n…';
+        }
+    
+        function paint() {
+          var on = 0;
+          heads.forEach(function (h) {
+            var s = isOn(h.n);
+            if (s) on++;
+            h.el.style.background = s ? '#FFD700' : '#E2E8F0';
+            h.el.style.color = '#000432';
+          });
+          if (countEl) countEl.textContent = on + ' tagged';
+        }
+    
+        function renderList() {
+          var q = (searchEl.value || '').toLowerCase().trim().replace(/^@/, '');
+          scroller.textContent = '';
+          heads = [];
+          var shown = 0;
+          chunks.forEach(function (ch) {
+            var label = labelOf(ch);
+            if (q && ('part' + ch.n).indexOf(q) < 0 && label.toLowerCase().indexOf(q) < 0 && ch.low.indexOf(q) < 0) return;
+            shown++;
+            var sec = mk('div', 'margin:0 0 10px;');
+            var hd = mk('div', 'position:sticky;top:0;z-index:2;cursor:pointer;padding:8px 14px;font-weight:800;font-size:12px;border-radius:999px;margin:0 6px 4px;word-break:break-word;', '@part' + ch.n + '   ·   L' + ch.s + '-' + ch.e + '   ·   ' + label);
+            hd.addEventListener('click', function () { toggleTag(ch.n); });
+            var pre = mk('pre', 'margin:0 10px;padding:6px 10px;background:rgba(255,255,255,0.08);color:#fff;border-radius:10px;font-size:11px;white-space:pre;overflow-x:auto;cursor:zoom-in;user-select:text;-webkit-user-select:text;', previewOf(ch));
+            var expanded = false;
+            pre.addEventListener('click', function () {
+              expanded = !expanded;
+              if (expanded) {
+                pre.textContent = dedent(ch.t);
+                pre.style.maxHeight = '60vh';
+                pre.style.overflow = 'auto';
+                pre.style.cursor = 'zoom-out';
+              } else {
+                pre.textContent = previewOf(ch);
+                pre.style.maxHeight = '';
+                pre.style.overflow = '';
+                pre.style.overflowX = 'auto';
+                pre.style.cursor = 'zoom-in';
+              }
+            });
+            sec.appendChild(hd);
+            sec.appendChild(pre);
+            scroller.appendChild(sec);
+            heads.push({ n: ch.n, el: hd });
+          });
+          if (!shown) scroller.appendChild(mk('div', 'padding:20px;text-align:center;color:#fff;', 'No part matches.'));
+          paint();
+        }
+    
+        function loadChunks() {
+          window._liteChunks = null;
+          liteSource(sourceContent || '', '');
+          chunks = window._liteChunks || [];
+          lastSrc = sourceContent;
+        }
+    
+        function fitBottom() {
+          if (!ov) return;
+          var top = window.innerHeight;
+          ['controlBar', 'shortcutBar', 'statusBar'].forEach(function (id) {
+            var e = document.getElementById(id);
+            if (!e) return;
+            var r = e.getBoundingClientRect();
+            if (r.height > 0 && r.top > window.innerHeight / 2) top = Math.min(top, r.top);
+          });
+          ov.style.bottom = (window.innerHeight - top) + 'px';
+        }
+    
+        function build() {
+          ov = mk('div', 'position:fixed;left:0;right:0;top:0;bottom:0;z-index:90;background:#000432;display:none;flex-direction:column;font-family:monospace;color:#fff;');
+          var head = mk('div', 'display:flex;gap:6px;align-items:center;padding:8px;border-bottom:1px solid #fff;flex-wrap:wrap;');
+          head.appendChild(mk('b', 'font-size:13px;', '🧩 PARTS MAP'));
+          searchEl = mk('input', 'flex:1 1 140px;min-width:0;background:#E2E8F0;color:#000432;border:none;border-radius:999px;padding:5px 12px;font-size:12px;');
+          searchEl.placeholder = 'search name / code / part number...';
+          searchEl.addEventListener('input', renderList);
+          countEl = mk('span', 'font-size:11px;', '0 tagged');
+          var bClr = mk('button', 'background:#000432;color:#fff;border:1px solid #fff;border-radius:999px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;', 'CLEAR');
+          bClr.addEventListener('click', function () {
+            $ins.value = $ins.value.replace(/(^|\s)@part\d+(?=\s|$)/g, '').replace(/^\s+/, '');
+            $ins.dispatchEvent(new Event('input', { bubbles: true }));
+            paint();
+          });
+          var bClose = mk('button', 'background:#000432;color:#fff;border:1px solid #fff;border-radius:999px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;', '✕');
+          bClose.addEventListener('click', closeMap);
+          head.appendChild(searchEl);
+          head.appendChild(countEl);
+          head.appendChild(bClr);
+          head.appendChild(bClose);
+          var hint = mk('div', 'padding:4px 10px;font-size:10px;opacity:0.8;', 'Tap a yellow/white header = add or remove its @part tag in the prompt box. Tap the code below it = expand / collapse.');
+          scroller = mk('div', 'flex:1 1 auto;overflow:auto;padding:6px 0;');
+          ov.appendChild(head);
+          ov.appendChild(hint);
+          ov.appendChild(scroller);
+          document.body.appendChild(ov);
+          $ins.addEventListener('input', function () { if (isOpen) paint(); });
+          window.addEventListener('resize', fitBottom);
+          document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && isOpen) closeMap(); });
+        }
+    
+        function openMap() {
+          if (!sourceContent) { toast('⚠️ Load a file first'); return; }
+          loadChunks();
+          if (!chunks.length) { toast('ℹ️ File is under 400 lines, it is sent whole (no parts)', 4000); return; }
+          if (!ov) build();
+          searchEl.value = '';
+          renderList();
+          fitBottom();
+          ov.style.display = 'flex';
+          isOpen = true;
+          btn.style.background = '#FFD700';
+          btn.style.color = '#000432';
+          watch = setInterval(function () {
+            if (isOpen && sourceContent !== lastSrc) { loadChunks(); renderList(); }
+            fitBottom();
+          }, 1500);
+        }
+    
+        function closeMap() {
+          if (ov) ov.style.display = 'none';
+          isOpen = false;
+          clearInterval(watch);
+          btn.style.background = '';
+          btn.style.color = '#ffffff';
+        }
+    
+        btn.addEventListener('click', function () { if (isOpen) closeMap(); else openMap(); });
+      })();
+    
+      // ── Parts Browser: view / search / copy every @part ───────────────────
+      (function initPartsBrowser() {
+        var btn = document.getElementById('partsBtn');
+        if (!btn) return;
+        var ov = null, listEl = null, searchEl = null, countEl = null;
+        var chunks = [], picked = {}, shownList = [];
+        var BTN = 'background:#000432;color:#fff;border:1px solid #fff;border-radius:999px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;';
+    
+        function mk(tag, css, txt) {
+          var e = document.createElement(tag);
+          if (css) e.style.cssText = css;
+          if (txt !== undefined) e.textContent = txt;
+          return e;
+        }
+    
+        function copyText(t, msg) {
+          var done = function () { toast(msg || '✅ Copied'); };
+          var fb = function () {
+            var ta = document.createElement('textarea');
+            ta.value = t;
+            ta.style.cssText = 'position:fixed;left:-9999px;top:0;';
+            document.body.appendChild(ta);
+            ta.select();
+            try { document.execCommand('copy'); done(); } catch (e) { toast('❌ Copy failed'); }
+            ta.remove();
+          };
+          try { isInternalCopy = true; setTimeout(function () { isInternalCopy = false; }, 1500); } catch (e0) {}
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(t).then(done, fb);
+          } else {
+            fb();
+          }
+        }
+    
+        function selected() {
+          return chunks.filter(function (ch) { return picked[ch.n]; });
+        }
+    
+        function updateCount() {
+          if (countEl) countEl.textContent = selected().length + ' selected';
+        }
+    
+        function labelOf(ch) {
+          var label = ch.names.slice(0, 8).join(', ');
+          if (!label) {
+            var first = ch.t.split('\n').map(function (x) { return x.trim(); }).filter(Boolean)[0] || '';
+            label = '(' + first.slice(0, 60) + ')';
+          }
+          return label;
+        }
+    
+        function renderList() {
+          var q = (searchEl.value || '').toLowerCase().trim().replace(/^@/, '');
+          listEl.textContent = '';
+          shownList = [];
+          chunks.forEach(function (ch) {
+            var label = labelOf(ch);
+            if (q && ('part' + ch.n).indexOf(q) < 0 && label.toLowerCase().indexOf(q) < 0 && ch.low.indexOf(q) < 0) return;
+            shownList.push(ch);
+            var row = mk('div', 'border-bottom:1px solid rgba(255,255,255,0.25);padding:6px 8px;');
+            var top = mk('div', 'display:flex;gap:6px;align-items:center;flex-wrap:wrap;');
+            var cb = mk('input');
+            cb.type = 'checkbox';
+            cb.checked = !!picked[ch.n];
+            cb.addEventListener('change', function () {
+              if (cb.checked) picked[ch.n] = 1; else delete picked[ch.n];
+              updateCount();
+            });
+            var info = mk('span', 'flex:1 1 160px;min-width:0;word-break:break-word;', '@part' + ch.n + '  L' + ch.s + '-' + ch.e + '  ·  ' + label);
+            var bTag = mk('button', BTN, 'TAG');
+            bTag.addEventListener('click', function () { copyText('@part' + ch.n, '✅ Copied @part' + ch.n); });
+            var bCode = mk('button', BTN, 'CODE');
+            bCode.addEventListener('click', function () { copyText(ch.t, '✅ Copied code of part ' + ch.n); });
+            var bView = mk('button', BTN, '👁');
+            var pre = null;
+            bView.addEventListener('click', function () {
+              if (pre) { pre.remove(); pre = null; return; }
+              pre = mk('pre', 'margin:6px 0 0;max-height:240px;overflow:auto;background:#E2E8F0;color:#000432;padding:8px;border-radius:8px;white-space:pre;font-size:11px;user-select:text;-webkit-user-select:text;');
+              pre.textContent = ch.t;
+              row.appendChild(pre);
+            });
+            top.appendChild(cb);
+            top.appendChild(info);
+            top.appendChild(bTag);
+            top.appendChild(bCode);
+            top.appendChild(bView);
+            row.appendChild(top);
+            listEl.appendChild(row);
+          });
+          if (!shownList.length) listEl.appendChild(mk('div', 'padding:14px;text-align:center;', 'No part matches.'));
+        }
+    
+        function build() {
+          ov = mk('div', 'position:fixed;inset:0;background:rgba(0,4,50,0.92);z-index:100000;display:none;align-items:center;justify-content:center;');
+          var box = mk('div', 'width:94vw;max-width:760px;height:88vh;background:#000432;border:1px solid #fff;border-radius:14px;display:flex;flex-direction:column;overflow:hidden;color:#fff;font-family:monospace;font-size:12px;');
+          var head = mk('div', 'display:flex;gap:6px;align-items:center;padding:8px;');
+          head.appendChild(mk('b', 'font-size:13px;', '🧩 PARTS'));
+          searchEl = mk('input', 'flex:1 1 120px;min-width:0;background:#E2E8F0;color:#000432;border:none;border-radius:999px;padding:5px 12px;font-size:12px;');
+          searchEl.placeholder = 'search name / code / part number...';
+          searchEl.addEventListener('input', renderList);
+          var bClose = mk('button', BTN, '✕');
+          bClose.addEventListener('click', close);
+          head.appendChild(searchEl);
+          head.appendChild(bClose);
+    
+          var bar = mk('div', 'display:flex;gap:6px;align-items:center;padding:0 8px 8px;border-bottom:1px solid #fff;flex-wrap:wrap;');
+          countEl = mk('span', 'flex:1 1 auto;', '0 selected');
+          var bTags = mk('button', BTN, 'COPY TAGS');
+          bTags.addEventListener('click', function () {
+            var s = selected();
+            if (!s.length) { toast('⚠️ Tick at least one part'); return; }
+            copyText(s.map(function (ch) { return '@part' + ch.n; }).join(' '), '✅ Copied ' + s.length + ' tag(s)');
+          });
+          var bCodes = mk('button', BTN, 'COPY CODE');
+          bCodes.addEventListener('click', function () {
+            var s = selected();
+            if (!s.length) { toast('⚠️ Tick at least one part'); return; }
+            copyText(s.map(function (ch) { return '=== PART ' + ch.n + ' (lines ' + ch.s + '-' + ch.e + ') ===\n' + ch.t; }).join('\n\n'), '✅ Copied code of ' + s.length + ' part(s)');
+          });
+          var bAll = mk('button', BTN, 'SELECT SHOWN');
+          bAll.addEventListener('click', function () {
+            shownList.forEach(function (ch) { picked[ch.n] = 1; });
+            renderList();
+            updateCount();
+          });
+          var bClr = mk('button', BTN, 'CLEAR');
+          bClr.addEventListener('click', function () {
+            picked = {};
+            renderList();
+            updateCount();
+          });
+          bar.appendChild(countEl);
+          bar.appendChild(bTags);
+          bar.appendChild(bCodes);
+          bar.appendChild(bAll);
+          bar.appendChild(bClr);
+    
+          listEl = mk('div', 'flex:1 1 auto;overflow:auto;');
+          box.appendChild(head);
+          box.appendChild(bar);
+          box.appendChild(listEl);
+          ov.appendChild(box);
+          ov.addEventListener('click', function (e) { if (e.target === ov) close(); });
+          document.body.appendChild(ov);
+          document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape' && ov && ov.style.display === 'flex') close();
+          });
+        }
+    
+        function close() {
+          if (ov) ov.style.display = 'none';
+        }
+    
+        function open() {
+          if (!sourceContent) { toast('⚠️ Load a file first'); return; }
+          window._liteChunks = null;
+          liteSource(sourceContent, '');
+          chunks = window._liteChunks || [];
+          if (!chunks.length) { toast('ℹ️ File is under 400 lines, it is sent whole (no parts)', 4000); return; }
+          if (!ov) build();
+          picked = {};
+          searchEl.value = '';
+          renderList();
+          updateCount();
+          ov.style.display = 'flex';
+        }
+    
+        btn.addEventListener('click', open);
+      })();
   
   function scanFileForTerms() {
     var instr = document.getElementById('aiInstruction').value.trim();
@@ -2303,5 +2670,6 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
 </script>
 </body>
 </html>
+​​​
 ​​​
 ​​​
