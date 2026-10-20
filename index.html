@@ -1205,14 +1205,19 @@ html body.compact-layout #controlBar select:focus{outline:0 !important;box-shado
     await ghPushFile(msg);
   });
   async function ghGetFileSHA(repoName, path, branch) {
-    const url = `https://api.github.com/repos/${repoName}/contents/${path}?ref=${branch}`;
-    try {
-      const res = await fetch(url, { headers: { Authorization: `token ${ghToken}`, Accept: 'application/vnd.github.v3+json' } });
-      if (res.status === 404) return null;
-      const data = await res.json();
-      return data.sha || null;
-    } catch(e) { return null; }
-  }
+      const clean = String(path).replace(/^\/+/, '').split('/').map(encodeURIComponent).join('/');
+      const url = `https://api.github.com/repos/${repoName}/contents/${clean}?ref=${encodeURIComponent(branch)}&t=${Date.now()}`;
+      try {
+        const res = await fetch(url, { cache: 'no-store', headers: { Authorization: `token ${ghToken}`, Accept: 'application/vnd.github.v3+json' } });
+        if (res.status === 404) return null;
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          const hit = data.find(function (f) { return f.path === decodeURIComponent(clean); });
+          return hit ? hit.sha : null;
+        }
+        return data.sha || null;
+      } catch(e) { return null; }
+    }
   async function ghPushFile(commitMsg) {
     const btn = document.getElementById('pushBtn');
     btn.classList.add('pushing'); btn.disabled = true;
@@ -1222,15 +1227,26 @@ html body.compact-layout #controlBar select:focus{outline:0 !important;box-shado
     try {
       toast('⬆ Pushing to GitHub…', 4000);
       document.getElementById('statusLeft').textContent = `⬆ Pushing to ${repo}…`;
-      const sha = await ghGetFileSHA(repo, filePath, branch);
       const encoded = btoa(unescape(encodeURIComponent(sourceContent)));
-      const body = { message: commitMsg, content: encoded, branch: branch };
-      if (sha) body.sha = sha;
-      const res = await fetch(`https://api.github.com/repos/${repo}/contents/${filePath}`, {
-        method: 'PUT',
-        headers: { Authorization: `token ${ghToken}`, Accept: 'application/vnd.github.v3+json', 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
-      });
+            const cleanPath = String(filePath).replace(/^\/+/, '');
+            const doPut = async function () {
+              const sha = await ghGetFileSHA(repo, cleanPath, branch);
+              const body = { message: commitMsg, content: encoded, branch: branch };
+              if (sha) body.sha = sha;
+              return fetch(`https://api.github.com/repos/${repo}/contents/${cleanPath.split('/').map(encodeURIComponent).join('/')}`, {
+                method: 'PUT',
+                headers: { Authorization: `token ${ghToken}`, Accept: 'application/vnd.github.v3+json', 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+              });
+            };
+            let res = await doPut();
+            if (!res.ok && res.status !== 401 && res.status !== 403) {
+              const firstErr = await res.clone().json().catch(function () { return {}; });
+              if (/sha/i.test(firstErr.message || '') || res.status === 409 || res.status === 422) {
+                await new Promise(function (r) { setTimeout(r, 600); });
+                res = await doPut();
+              }
+            }
       if (res.ok) {
         const data = await res.json();
         document.getElementById('statusLeft').textContent = `✅ Pushed to ${repo}`;
@@ -1731,11 +1747,11 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
           heads = [];
           var shown = 0;
           chunks.forEach(function (ch) {
-            var label = labelOf(ch);
-            if (q && ('part' + ch.n).indexOf(q) < 0 && label.toLowerCase().indexOf(q) < 0 && ch.low.indexOf(q) < 0) return;
-            shown++;
-            var sec = mk('div', 'margin:0 0 10px;');
-            var hd = mk('div', 'position:sticky;top:0;z-index:2;cursor:pointer;padding:8px 14px;font-weight:800;font-size:12px;border-radius:999px;margin:0 6px 4px;word-break:break-word;', '@part' + ch.n + '   ·   L' + ch.s + '-' + ch.e + '   ·   ' + label);
+            var label = ch.names.slice(0, 8).join(', ');
+                        if (q && ('part' + ch.n).indexOf(q) < 0 && label.toLowerCase().indexOf(q) < 0 && ch.low.indexOf(q) < 0) return;
+                        shown++;
+                        var sec = mk('div', 'margin:0 0 10px;');
+                        var hd = mk('div', 'position:sticky;top:0;z-index:2;cursor:pointer;padding:8px 14px;font-weight:800;font-size:12px;border-radius:999px;margin:0 6px 4px;word-break:break-word;', '@part' + ch.n + '   ·   L' + ch.s + '-' + ch.e + (label ? '   ·   ' + label : ''));
             hd.addEventListener('click', function () { toggleTag(ch.n); });
             var pre = mk('pre', 'margin:0 10px;padding:6px 10px;background:rgba(255,255,255,0.08);color:#fff;border-radius:10px;font-size:11px;white-space:pre;overflow-x:auto;cursor:zoom-in;user-select:text;-webkit-user-select:text;', previewOf(ch));
             var expanded = false;
@@ -2670,6 +2686,7 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
 </script>
 </body>
 </html>
+​​​
 ​​​
 ​​​
 ​​​
