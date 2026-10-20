@@ -1779,12 +1779,152 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
           paint();
         }
     
-        function loadChunks() {
-          window._liteChunks = null;
-          liteSource(sourceContent || '', '');
-          chunks = window._liteChunks || [];
-          lastSrc = sourceContent;
-        }
+        var pmUi = true, pmLayer = null, pmHead = null, pmHint = null, pmModeBtn = null, pmChips = [], pmSig = '';
+                var pmCssCache = {}, pmInfoCache = {};
+        
+                function pmEsc(s) { return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+        
+                function pmFirstWith(strs) {
+                  var a, b;
+                  for (a = 0; a < chunks.length; a++) {
+                    for (b = 0; b < strs.length; b++) {
+                      if (chunks[a].t.indexOf(strs[b]) >= 0) return chunks[a].n;
+                    }
+                  }
+                  return 0;
+                }
+        
+                function pmMarkup(el) {
+                  var n = 0, best = null, tx = '', cls;
+                  if (el.id) n = pmFirstWith(['id="' + el.id + '"', "id='" + el.id + "'"]);
+                  if (!n) {
+                    ['data-val', 'aria-label', 'data-id', 'name'].forEach(function (at) {
+                      var v = el.getAttribute(at);
+                      if (!n && v) n = pmFirstWith([at + '="' + v + '"']);
+                    });
+                  }
+                  if (!n) {
+                    cls = (typeof el.className === 'string' ? el.className : '').split(/\s+/).filter(Boolean);
+                    cls.forEach(function (c) {
+                      var re = new RegExp('class\\s*=\\s*["\'](?:[^"\']*\\s)?' + pmEsc(c) + '(?![\\w-])');
+                      var ms = chunks.filter(function (ch) { return re.test(ch.t); });
+                      if (ms.length && (!best || ms.length < best.length)) best = ms;
+                    });
+                    if (best) n = best[0].n;
+                  }
+                  if (!n && el.childNodes && el.childNodes.length) {
+                    tx = (el.childNodes[0].nodeType === 3 ? el.childNodes[0].nodeValue : '').trim();
+                    if (tx.length >= 2) n = pmFirstWith(['>' + tx]);
+                  }
+                  return n;
+                }
+        
+                function pmCss(el, skipN) {
+                  var out = [], toks = [];
+                  var cls = (typeof el.className === 'string' ? el.className : '').split(/\s+/).filter(function (c) {
+                    return c && !/^(active|on|off|show|hidden|selected|open|disabled)$/.test(c);
+                  }).slice(0, 4);
+                  if (el.id) toks.push('#' + el.id);
+                  cls.forEach(function (c) { toks.push('.' + c); });
+                  toks.forEach(function (tk) {
+                    var hit = pmCssCache[tk];
+                    if (!hit) {
+                      hit = [];
+                      var re = new RegExp(pmEsc(tk) + '(?![\\w-])[^{};]*\\{');
+                      chunks.forEach(function (ch) {
+                        if (ch.t.indexOf(tk) < 0) return;
+                        if (ch.pmCss === undefined) ch.pmCss = !/\bfunction\s*[\w(]|\b(var|const|let)\s+[\w$]+\s*[=;,]|=>/.test(ch.t);
+                        if (ch.pmCss && re.test(ch.t)) hit.push(ch.n);
+                      });
+                      pmCssCache[tk] = hit;
+                    }
+                    hit.forEach(function (n) { if (n !== skipN && out.indexOf(n) < 0) out.push(n); });
+                  });
+                  return out.slice(0, 2);
+                }
+        
+                function pmInfo(el) {
+                  var first = (el.childNodes[0] && el.childNodes[0].nodeType === 3) ? el.childNodes[0].nodeValue.trim() : '';
+                  var key = el.tagName + '|' + el.id + '|' + (typeof el.className === 'string' ? el.className : '') + '|' + (el.getAttribute('data-val') || '') + '|' + (el.getAttribute('aria-label') || '') + '|' + first;
+                  if (pmInfoCache[key] !== undefined) return pmInfoCache[key];
+                  var mu = pmMarkup(el), parts = [], info = null;
+                  if (mu) parts.push({ n: mu, css: false });
+                  pmCss(el, mu).forEach(function (n) { parts.push({ n: n, css: true }); });
+                  if (parts.length) {
+                    info = { key: parts.map(function (p) { return p.n; }).join(','), parts: parts };
+                  }
+                  pmInfoCache[key] = info;
+                  return info;
+                }
+        
+                function pmPaint() {
+                  pmChips.forEach(function (c) {
+                    c.el.style.background = isOn(c.n) ? '#FFD700' : (c.css ? '#9BE7FF' : '#E2E8F0');
+                  });
+                }
+        
+                function pmLayout() {
+                  if (!pmLayer || !isOpen || !pmUi) return;
+                  var ifr = document.getElementById('preview'), doc = null;
+                  try { doc = ifr ? ifr.contentDocument : null; } catch (e) { doc = null; }
+                  if (!doc || !doc.body) return;
+                  var win = doc.defaultView, fr = ifr.getBoundingClientRect();
+                  var lim = ov.getBoundingClientRect().bottom;
+                  var topMin = pmHead.getBoundingClientRect().bottom + 2;
+                  var vw = window.innerWidth;
+                  var tagOk = /^(BUTTON|INPUT|SELECT|TEXTAREA|A|CANVAS|LABEL)$/;
+                  var list = doc.body.querySelectorAll('*'), groups = [], a, b, el, r, cs, info, g, x, y;
+                  for (a = 0; a < list.length && a < 4000; a++) {
+                    el = list[a];
+                    if (!(el.id || tagOk.test(el.tagName))) continue;
+                    if (el.closest && el.closest('svg')) continue;
+                    r = el.getBoundingClientRect();
+                    if (r.width < 6 || r.height < 6) continue;
+                    cs = win.getComputedStyle(el);
+                    if (cs.visibility === 'hidden' || cs.display === 'none') continue;
+                    x = fr.left + r.left;
+                    y = fr.top + r.top;
+                    if (x >= vw || y >= lim - 6 || x + r.width <= 0 || y + r.height <= topMin) continue;
+                    info = pmInfo(el);
+                    if (!info) continue;
+                    g = null;
+                    for (b = 0; b < groups.length; b++) {
+                      if (groups[b].par === el.parentElement && groups[b].key === info.key) { g = groups[b]; break; }
+                    }
+                    if (!g) {
+                      g = { par: el.parentElement, key: info.key, parts: info.parts, x1: x, y1: y, x2: x + r.width, y2: y + r.height, names: [] };
+                      groups.push(g);
+                    } else {
+                      g.x1 = Math.min(g.x1, x);
+                      g.y1 = Math.min(g.y1, y);
+                      g.x2 = Math.max(g.x2, x + r.width);
+                      g.y2 = Math.max(g.y2, y + r.height);
+                    }
+                    if (g.names.length < 6) g.names.push(el.id ? '#' + el.id : el.tagName.toLowerCase());
+                  }
+                  var sig = groups.map(function (q) {
+                    return q.key + ':' + Math.round(q.x1) + ',' + Math.round(q.y1) + ',' + Math.round(q.x2) + ',' + Math.round(q.y2);
+                  }).join('|');
+                  if (sig === pmSig) return;
+                  pmSig = sig;
+                  pmLayer.textContent = '';
+                  pmChips = [];
+                  var placed = [];
+                  groups.forEach(function (q) {
+                    var box = mk('div', 'position:absolute;pointer-events:none;box-sizing:border-box;border:1px dashed rgba(255,215,0,0.6);border-radius:6px;left:' + q.x1 + 'px;top:' + q.y1 + 'px;width:' + (q.x2 - q.x1) + 'px;height:' + (q.y2 - q.y1) + 'px;');
+                    pmLayer.appendChild(box);
+                    var cw = q.parts.length * 50, chH = 15, cx = Math.max(2, Math.min(q.x1, vw - cw - 2)), cy = Math.max(topMin, q.y1 - 7), t, hit;
+                    for (t = 0; t < 10; t++) {
+                      hit = placed.some(function (p) { return cx < p.x + p.w && cx + cw > p.x && cy < p.y + p.h && cy + chH > p.y; });
+                      if (!hit) break;
+                      cy += chH + 1;
+                    }
+                    if (cy > lim - chH) cy = lim - chH;
+                    placed.push({ x: cx, y: cy, w: cw, h: chH });
+                    var row = mk('div', 'position:absolute;display:flex;gap:2px;pointer-events:auto;z-index:2;left:' + cx + 'px;top:' + cy + 'px;');
+                    q.parts.forEach(function (p) {
+                      var c = mk('span', 'cursor:pointer;font-size:9px;font-weight:800;line-height:13px;padding:0 5px;border-radius:999px;color:#000432;box-shadow:0 0 0 1px #000432;white-space:nowrap;user-select:none;-webkit-user-select:none;', '@part' + p.n);
+                      c.title = (p.css ? 'styles' : 'markup') + ' - ' +
     
         function fitBottom() {
           if (!ov) return;
