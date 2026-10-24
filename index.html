@@ -1223,8 +1223,7 @@ html body.compact-layout #controlBar select:focus{outline:0 !important;box-shado
     btn.classList.add('pushing'); btn.disabled = true;
     const branch   = ghBranch   || 'main';
     const filePath = ghFilePath || 'index.html';
-    const repo     = ghCurrentRepo;
-    try {
+  const repo     = (ghCurrentRepo && ghCurrentRepo.indexOf('/') === -1) ? ((ghUser || '888znq') + '/' + ghCurrentRepo) : ghCurrentRepo;    try {
       toast('⬆ Pushing to GitHub…', 4000);
       document.getElementById('statusLeft').textContent = `⬆ Pushing to ${repo}…`;
       const encoded = btoa(unescape(encodeURIComponent(sourceContent)));
@@ -1254,7 +1253,7 @@ html body.compact-layout #controlBar select:focus{outline:0 !important;box-shado
       } else {
         const err = await res.json().catch(()=>({}));
         document.getElementById('statusLeft').textContent = `❌ Push failed`;
-        toast(`❌ Push failed: ${err.message || res.status}`);
+        toast(`❌ Push failed: ${err.message || res.status}` + ((res.status === 403 || res.status === 404) ? ' — token needs write access to ' + repo : ''), 7000);
       }
     } catch(e) {
       document.getElementById('statusLeft').textContent = '❌ Push error';
