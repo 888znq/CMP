@@ -2158,7 +2158,14 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
     if (!box || !payloadBtn) return;
     var SPLIT_MARK = '===' + 'SPLIT' + '===';
     var on = true;
-    var inFrame = (window.parent !== window);   // inside the extension pane = always armed; manual mode lasts one session only
+    var inFrame = true;   // always armed, also in a normal browser tab (⚡ button = manual mode)
+    window.__extApplyPatch = function (t) {   // the extension replaces this one; in a plain tab this one is used
+      var ab = document.getElementById('pasteAndProcessBtn'), old = window.AndroidClipboard;
+      window.AndroidClipboard = { read: function () { return t; } };
+      try { ab.click(); }
+      finally { if (old === undefined) delete window.AndroidClipboard; else window.AndroidClipboard = old; }
+    };
+    var realFrame = (window.parent !== window);   // inside the extension pane = always armed; manual mode lasts one session only
     var watching = false, request = '', lastSeen = null, busy = false, reading = false, timer = null, armedTags = [];
     var basePlaceholder = box.placeholder;
 
@@ -2247,7 +2254,7 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
       // clipboard check also runs inside the extension: copy @parts or a patch, then tap this pane
             if (!on || (!watching && !inFrame) || busy || reading || !sourceContent) return;
       var bridge = !!(window.AndroidClipboard && typeof window.AndroidClipboard.read === 'function');
-      if (!bridge && !inFrame && !document.hasFocus()) return;
+      if (!bridge && !realFrame && !document.hasFocus()) return;
       reading = true;
             setTimeout(function () { reading = false; }, 3000);
             readClip().then(function (text) {
