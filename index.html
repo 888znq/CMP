@@ -615,14 +615,16 @@ html body.compact-layout #controlBar #repoVisBtn{flex:0 0 auto !important;min-wi
 html body.compact-layout #controlBar #ghNewRepoBtn{padding:0 16px 0 12px !important;}
 html body.compact-layout #controlBar input:focus,
 html body.compact-layout #controlBar button:focus,
-html body.compact-layout #controlBar select:focus{outline:0 !important;box-shadow:none !important;border:0 !important;}
+html body.compact-layout #controlBar select:focus{outline:0 !important;border:0 !important;box-shadow:none !important;}
+html body.compact-layout.ap-auto #controlBar #bottom-controls #pasteAndProcessBtn,html body.compact-layout.ap-auto #pasteAndProcessBtn{display:none !important;}
 </style>
 </head>
 <body class="compact-layout">
 <script>(function () { try { var par = window.parent; if (par !== window && par.document) { var pv = par.document.getElementById('preview'); if (pv && pv.contentWindow === window) { window.stop(); } } } catch (e) {} })();</script>
 <script>(function () { try { var par = window.parent; if (par !== window && par.document) { var pv = par.document.getElementById('preview'); if (pv && pv.contentWindow === window) { window.stop(); } } } catch (e) {} })();</script>
 
-<div id="bridgeIndicator">📋 Patch: Ready</div>
+<script>(function () { if (window.parent !== window || (window.AndroidClipboard && typeof window.AndroidClipboard.read === 'function')) { document.body.classList.add('ap-auto'); } })();</script>
+<div id="bridgeIndicator" data-ap="1">📋 Patch: Ready</div>
 
 <iframe id="preview" sandbox="allow-scripts allow-same-origin allow-modals allow-forms allow-popups"></iframe>
 <textarea id="codeView" spellcheck="false" placeholder="Raw code goes here..."></textarea>
