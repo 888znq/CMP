@@ -3066,5 +3066,533 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
       });
     }
 </script>
+<script>
+(function nutsLoopV2() {
+  if (window.parent === window) return;
+  window.__NUTS_V2 = true;
+  window.__nutsSendError = function () {};
+
+  var SPL = '===' + 'SPLIT' + '===';
+  var BLK = '===' + 'BLOCK' + '===';
+  var RE_SPL = /^[ \t]*={3}[ \t]*SPLIT[ \t]*={3}[ \t\r]*$/m;
+  var RE_CMT = new RegExp('^(//|/\\*|\\*|<!' + '--|#\\s)');
+  var MAX_FAILS = 5, MAX_NUDGES = 3, MAX_SENDS = 30, MAX_SAME = 3;
+  var JUNK = /^@(media|keyframes|import|font-face|charset|supports|param|returns?|type|see|todo|override|auto)$/i;
+  var ALL = /^@(all|file|full|whole|everything)$/i;
+  var W = { key: '', reg: [], changes: [], expect: null, outside: 0 };
+  var S = null;
+  var V = { awaiting: false, busy: false, timer: 0, watch: 0, reply: null, sentAt: 0 };
+  var cc = { s: null, c: '', m: null };
+
+  function T(m, ms) { try { toast(m, ms || 3500); } catch (e) {} try { console.log('[NUTS-V2] ' + m); } catch (e2) {} }
+  function uniq(a) { return a.filter(function (x, i) { return a.indexOf(x) === i; }); }
+  function nws(s) { return String(s == null ? '' : s).replace(/\s+/g, ' ').trim(); }
+  function clip(s, n) { s = nws(s); return s.length > n ? s.slice(0, n) + '...' : s; }
+  function firstLine(s) { var l = String(s).split('\n'), i; for (i = 0; i < l.length; i++) if (l[i].trim()) return l[i].trim(); return ''; }
+  function lineOf(src, idx) { var n = 1, i = -1; while ((i = src.indexOf('\n', i + 1)) !== -1 && i < idx) n++; return n; }
+  function cnt(s, c) { return String(s).split(c).length - 1; }
+  function budget() { return window.__V2_BUDGET || 60000; }
+
+  function chunksOf(src) {
+    var c = null;
+    try { window._liteChunks = null; liteSource(src, ''); c = window._liteChunks; } catch (e) { c = null; }
+    window._liteChunks = null;
+    return c || null;
+  }
+  function sigOf(ch) { return firstLine(ch.t).slice(0, 100); }
+  function tagOf(ch) { return ch.names.length ? '@' + ch.names[0] : '@part' + ch.n; }
+  function entryOf(ch) { return { n: ch.n, s: ch.s, names: ch.names.slice(0, 6), sig: sigOf(ch) }; }
+  function chunksForLines(cs, a, b) { return cs.filter(function (c) { return c.s <= b && c.e >= a; }); }
+  function snapshot() {
+    var cs = chunksOf(sourceContent), m = {};
+    if (!cs) return null;
+    cs.forEach(function (ch) { m[ch.n] = entryOf(ch); });
+    return m;
+  }
+  function findChunk(en, cs) {
+    var i, k;
+    if (!cs) return null;
+    for (i = 0; i < cs.length; i++) for (k = 0; k < en.names.length; k++) if (cs[i].names.indexOf(en.names[k]) >= 0) return cs[i];
+    if (en.sig && en.sig.length >= 6) {
+      for (i = 0; i < cs.length; i++) if (sigOf(cs[i]) === en.sig) return cs[i];
+      for (i = 0; i < cs.length; i++) if (cs[i].t.indexOf(en.sig) >= 0) return cs[i];
+    }
+    return null;
+  }
+  function reg(ch) {
+    var en = entryOf(ch), i;
+    for (i = 0; i < W.reg.length; i++) if (W.reg[i].sig === en.sig && W.reg[i].names.join() === en.names.join()) return;
+    W.reg.push(en);
+    if (W.reg.length > 40) W.reg.shift();
+  }
+  function sessionChunks(cs) {
+    var out = [], seen = {};
+    if (!cs) return out;
+    W.reg.forEach(function (en) { var ch = findChunk(en, cs); if (ch && !seen[ch.n]) { seen[ch.n] = 1; out.push(ch); } });
+    return out.sort(function (a, b) { return a.n - b.n; });
+  }
+  function resolveTags(tags, cs) {
+    var found = [], unknown = [], seen = {};
+    function add(ch) { if (ch && !seen[ch.n]) { seen[ch.n] = 1; found.push(ch); } }
+    tags.forEach(function (tg) {
+      var key = tg.slice(1).toLowerCase(), m = /^(?:part|p)(\d+)(?:-(\d+))?$/.exec(key), hit = 0, a, z, n, en, ch;
+      if (!cs) { unknown.push(tg); return; }
+      if (m) {
+        a = +m[1]; z = m[2] ? Math.min(+m[2], a + 7) : a;
+        for (n = a; n <= z; n++) {
+          en = S && S.snap ? S.snap[n] : null;
+          ch = cs[n - 1];
+          if (en && (!ch || sigOf(ch) !== en.sig)) ch = findChunk(en, cs) || ch;
+          if (ch) { add(ch); hit++; }
+        }
+      } else {
+        cs.forEach(function (c) { if (c.names.some(function (x) { return x.toLowerCase() === key; })) { if (hit < 3) add(c); hit++; } });
+      }
+      if (!hit) unknown.push(tg);
+    });
+    return { found: found, unknown: unknown };
+  }
+
+  function head(ch) { return '=== PART ' + ch.n + ' (lines ' + ch.s + '-' + ch.e + ')' + (ch.names.length ? ' ' + ch.names.slice(0, 5).map(function (x) { return '@' + x; }).join(' ') : '') + ' ==='; }
+  function block(list, bud) {
+    var out = [], used = 0, sent = [], skip = [];
+    list.forEach(function (ch) {
+      var t = head(ch) + '\n' + ch.t;
+      if (sent.length && used + t.length > bud) { skip.push(ch); return; }
+      used += t.length; sent.push(ch); out.push(t);
+    });
+    return { text: out.join('\n\n'), sent: sent, skip: skip };
+  }
+  function others(cs, sent) {
+    var n = {}, l;
+    if (!cs) return '';
+    sent.forEach(function (c) { n[c.n] = 1; });
+    l = cs.filter(function (c) { return !n[c.n] && c.names.length; }).slice(0, 400).map(function (c) { return c.n + ' L' + c.s + '-' + c.e + ': ' + c.names.slice(0, 5).join(', '); });
+    return l.length ? '=== OTHER PARTS (names only, request them with @name) ===\n' + l.join('\n') : '';
+  }
+  function partsList(src) {
+    var idx, k;
+    try {
+      idx = liteIndex(src, S ? S.req : '');
+      window._liteChunks = null;
+      k = idx.indexOf('=== PARTS');
+      return k >= 0 ? idx.slice(k) : '(small file: it is sent whole)';
+    } catch (e) { return ''; }
+  }
+
+  function compact(src) {
+    var out = [], map = [], i, k;
+    if (cc.s === src) return cc;
+    for (i = 0; i < src.length; i++) {
+      k = src.charCodeAt(i);
+      if (k === 32 || k === 9 || k === 10 || k === 13 || k === 160 || k === 8203 || k === 65279) continue;
+      out.push(src.charAt(i));
+      map.push(i);
+    }
+    cc = { s: src, c: out.join(''), m: map };
+    return cc;
+  }
+  function locate(src, old) {
+    var hits = [], i = -1, j = -1, q, c;
+    while (hits.length < 20 && (i = src.indexOf(old, i + 1)) !== -1) hits.push({ a: i, b: i + old.length });
+    if (hits.length) return { hits: hits };
+    q = old.replace(/\s+/g, '');
+    if (q.length < 6) return { hits: [] };
+    c = compact(src);
+    while (hits.length < 20 && (j = c.c.indexOf(q, j + 1)) !== -1) hits.push({ a: c.m[j], b: c.m[j + q.length - 1] + 1 });
+    return { hits: hits };
+  }
+  function reindent(src, a, nw) {
+    var ls, base, lines, min, i, k, pad;
+    if (!nw) return nw;
+    ls = src.lastIndexOf('\n', a - 1) + 1;
+    base = src.slice(ls, a).match(/^[ \t]*/)[0];
+    lines = nw.split('\n');
+    if (lines.length < 2 || !base) return nw;
+    min = 1e9;
+    for (i = 1; i < lines.length; i++) { if (!lines[i].trim()) continue; k = lines[i].match(/^[ \t]*/)[0].length; if (k < min) min = k; }
+    if (min === 1e9 || base.length <= min) return nw;
+    pad = base.substring(min);
+    return lines.map(function (l, i2) { return (i2 === 0 || !l.trim()) ? l : pad + l; }).join('\n');
+  }
+  function phLines(code) {
+    var bad = [];
+    String(code).split('\n').forEach(function (l) {
+      var t = l.trim(), isC, hit;
+      if (!t || t.length > 200) return;
+      isC = RE_CMT.test(t);
+      hit = /^(\.{3}|\u2026)$/.test(t) || (isC && (/(\.{3}|\u2026)/.test(t) || /(rest of (the )?(code|file|function|block|section|script|styles?)|existing code|remaining code|code omitted|same as (before|above)|unchanged)/i.test(t)));
+      if (hit && sourceContent.indexOf(t) < 0) bad.push(t);
+    });
+    return bad;
+  }
+  function balDelta(blocks) {
+    var r = { '{': 0, '(': 0, '[': 0 }, close = { '{': '}', '(': ')', '[': ']' };
+    blocks.forEach(function (b) {
+      var o;
+      for (o in close) r[o] += (cnt(b.newCode, o) - cnt(b.newCode, close[o])) - (cnt(b.oldCode, o) - cnt(b.oldCode, close[o]));
+    });
+    return r;
+  }
+  function parseBlocks(text) {
+    var F = String.fromCharCode(96, 96, 96), t, units, out = [], bad = 0;
+    t = String(text).replace(/\r\n/g, '\n').replace(/\/\/\s*(OLD|NEW)\s*CHUNK\s*/gi, '');
+    t = t.replace(new RegExp('^' + F + '[\\w-]*[ \\t]*\\n?', 'gm'), '').replace(new RegExp('^' + F + '[ \\t]*$', 'gm'), '').trim();
+    units = t.split(/={3}\s*BLOCK[^=\n]*={3}/i).map(function (u) { return u.trim(); }).filter(Boolean);
+    units.forEach(function (u) {
+      var m = u.match(/={3}\s*SPLIT\s*={3}/i), k;
+      if (!m) { bad++; return; }
+      k = u.indexOf(m[0]);
+      out.push({ oldCode: u.slice(0, k).trim(), newCode: u.slice(k + m[0].length).trim() });
+    });
+    return { blocks: out, bad: bad };
+  }
+
+  function diag(src, old) {
+    var oldL = old.split('\n').map(nws).filter(Boolean), L = src.split('\n'), nb = [], pos = Object.create(null), votes = Object.create(null);
+    var found = 0, i, j, k, best = null, bs = 0, d, e, sc, t, js, je, la, lb, c0, c1, mism = [], act;
+    for (i = 0; i < L.length; i++) { t = nws(L[i]); if (t) nb.push({ t: t, i: i }); }
+    nb.forEach(function (o, jj) { if (o.t.length >= 5) (pos[o.t] = pos[o.t] || []).push(jj); });
+    oldL.forEach(function (t2, kk) {
+      var p = pos[t2];
+      if (!p) return;
+      found++;
+      if (p.length > 6) return;
+      p.forEach(function (jj) { votes[jj - kk] = (votes[jj - kk] || 0) + 1; });
+    });
+    for (d in votes) { sc = 0; for (e = -3; e <= 3; e++) sc += votes[+d + e] || 0; if (sc > bs) { bs = sc; best = +d; } }
+    if (best === null) {
+      for (k = 0; k < oldL.length && best === null; k++) {
+        if (oldL[k].length < 12) continue;
+        for (j = 0; j < nb.length; j++) {
+          if (nb[j].t.indexOf(oldL[k]) >= 0 || (nb[j].t.length >= 12 && oldL[k].indexOf(nb[j].t) >= 0)) { best = j - k; break; }
+        }
+      }
+    }
+    if (best === null || !nb.length) return { none: true, total: oldL.length, found: found };
+    js = Math.max(0, Math.min(best, nb.length - 1));
+    je = Math.max(js, Math.min(best + oldL.length - 1, nb.length - 1));
+    la = nb[js].i; lb = nb[je].i;
+    c0 = Math.max(0, la - 2); c1 = Math.min(L.length - 1, lb + 2);
+    if (c1 - c0 > 59) c1 = c0 + 59;
+    for (k = 0; k < oldL.length && mism.length < 5; k++) {
+      act = nb[js + k];
+      if (!act) mism.push([oldL[k], '(end of file)']);
+      else if (act.t !== oldL[k]) mism.push([oldL[k], act.t]);
+    }
+    return {
+      found: found, total: oldL.length, a: la + 1, b: lb + 1, c0: c0 + 1, c1: c1 + 1, mism: mism,
+      ctx: L.slice(c0, c1 + 1).map(function (l) { return l.length > 300 ? l.slice(0, 300) + ' [line cut]' : l; }).join('\n')
+    };
+  }
+  function notFoundText(src, b, i, n) {
+    var d = diag(src, b.oldCode), t = [];
+    t.push('Block ' + i + ' of ' + n + ': the OLD text was NOT FOUND in the current file' + (src !== sourceContent ? ' (as it stands after your earlier blocks were applied in memory)' : '') + '.');
+    if (d.none) {
+      t.push('Your OLD does not match anything in the file (only generic lines such as closing braces were found). You are working from an outdated or invented copy. Do not guess: reply with ONLY @tags of the parts you need (names and numbers are listed below).');
+      return { text: t.join('\n'), spots: [], none: true };
+    }
+    t.push(d.found + ' of ' + d.total + ' lines of your OLD exist in the file. Closest place: lines ' + d.a + '-' + d.b + '.');
+    if (d.mism.length) t.push('Where your OLD and the real file differ:\n' + d.mism.map(function (p) { return '  OLD:    ' + clip(p[0], 160) + '\n  ACTUAL: ' + clip(p[1], 160); }).join('\n'));
+    t.push('REAL TEXT at lines ' + d.c0 + '-' + d.c1 + ' (copy OLD from here, character for character):\n' + d.ctx);
+    return { text: t.join('\n'), spots: [{ a: d.a, b: d.b }] };
+  }
+  function ambigText(src, hits, b, i, n) {
+    var L = src.split('\n'), cs = chunksOf(src), t = [], spots = [];
+    t.push('Block ' + i + ' of ' + n + ': the OLD text matches ' + hits.length + (hits.length >= 20 ? '+' : '') + ' places, so I cannot tell which one you mean. Lines: ' + hits.slice(0, 8).map(function (h) { return lineOf(src, h.a); }).join(', ') + '.');
+    hits.slice(0, 4).forEach(function (h) {
+      var ln = lineOf(src, h.a), a = Math.max(1, ln - 3), z = Math.min(L.length, ln + b.oldCode.split('\n').length + 2), nm = '', c;
+      if (cs) { c = chunksForLines(cs, ln, ln)[0]; if (c) nm = ' (' + tagOf(c) + ')'; }
+      t.push('Match at line ' + ln + nm + ' with context:\n' + L.slice(a - 1, Math.min(z, a + 14)).join('\n'));
+      spots.push({ a: ln, b: ln });
+    });
+    t.push('Fix: make OLD longer by adding the unique line(s) directly above or below it, so it matches exactly ONE place.');
+    return { text: t.join('\n'), spots: spots };
+  }
+
+  async function applyPatch(text, sig) {
+    var pr = parseBlocks(text), blocks = pr.blocks, n = blocks.length, work = sourceContent, done = [], skipped = [];
+    var i, b, loc, h, nw, ph, worst, bd, bad, r, cs2;
+    function fail(kind, t, x) { var o = { ok: false, kind: kind, text: t, spots: [], src: sourceContent }, k; if (x) for (k in x) o[k] = x[k]; return o; }
+    if (!n) return fail('format', 'No valid pair found. Required format: ONE code block; the exact OLD code, then a line containing only ' + SPL + ', then the NEW code (an empty NEW deletes the OLD). Several fixes: a line containing only ' + BLK + ' between the pairs.');
+    if (pr.bad) return fail('format', pr.bad + ' block(s) had no line containing only ' + SPL + '. Every pair needs: OLD, a line with only ' + SPL + ', then NEW.');
+    for (i = 0; i < n; i++) {
+      b = blocks[i];
+      if (!b.oldCode) return fail('emptyold', 'Block ' + (i + 1) + ' of ' + n + ' has an EMPTY OLD part. OLD must contain the exact existing code to replace. To insert new code, put the line it goes after (or before) into OLD and repeat that line in NEW.');
+      ph = phLines(b.oldCode).concat(phLines(b.newCode));
+      if (ph.length) return fail('placeholder', 'Block ' + (i + 1) + ' of ' + n + ' contains placeholder text instead of real code: ' + ph.slice(0, 3).map(function (x) { return '"' + x + '"'; }).join(', ') + '. OLD and NEW must be complete and exact; never write "...", "rest unchanged" or similar.');
+      worst = 0;
+      b.newCode.split('\n').forEach(function (l) { if (l.length > worst) worst = l.length; });
+      if (worst > 3000 || /base64,[A-Za-z0-9+\/=]{2000,}/.test(b.newCode)) return fail('toolong', 'Block ' + (i + 1) + ' of ' + n + ' has a line of ' + worst + ' characters or an embedded base64 blob (limit 3000 per line). Keep such data in a separate file or use normal short lines.');
+    }
+    if (window.__V2_BALANCE !== false) {
+      bd = balDelta(blocks);
+      bad = [];
+      ['{', '(', '['].forEach(function (c) { if (bd[c]) bad.push((bd[c] > 0 ? '+' : '') + bd[c] + ' net "' + c + '"'); });
+      if (bad.length && S.unbalSig !== sig) {
+        S.unbalSig = sig;
+        return fail('unbalanced', 'The patch looks UNBALANCED: compared with your OLD text, your NEW code has ' + bad.join(', ') + ' (summed over all blocks). That usually means code was cut off or a bracket is missing. Check it. If it is really intentional, resend the SAME patch unchanged and it will be applied.');
+      }
+    }
+    for (i = 0; i < n; i++) {
+      b = blocks[i];
+      if (nws(b.oldCode) === nws(b.newCode)) continue;
+      loc = locate(work, b.oldCode);
+      if (!loc.hits.length) {
+        if (window.__V2_SKIP_PRESENT !== false && b.newCode.replace(/\s+/g, '').length >= 40 && locate(work, b.newCode).hits.length === 1) { skipped.push(i + 1); continue; }
+        r = notFoundText(work, b, i + 1, n);
+        return fail('notfound', r.text, { spots: r.spots, none: !!r.none, src: work });
+      }
+      if (loc.hits.length > 1) { r = ambigText(work, loc.hits, b, i + 1, n); return fail('ambiguous', r.text, { spots: r.spots, src: work }); }
+      h = loc.hits[0];
+      nw = reindent(work, h.a, b.newCode);
+      done.push({ line: lineOf(work, h.a), needle: firstLine(b.newCode).length >= 8 ? firstLine(b.newCode) : '', oldFirst: clip(firstLine(b.oldCode), 80), newFirst: clip(firstLine(b.newCode) || '(deleted)', 80), tag: '' });
+      work = work.slice(0, h.a) + nw + work.slice(h.b);
+    }
+    if (!done.length) return { ok: true, items: [], skipped: skipped };
+    pushState();
+    sourceContent = work;
+    W.expect = work;
+    render(sourceContent);
+    if (fileHandle) await nativeSilentSave(sourceContent);
+    cs2 = chunksOf(sourceContent);
+    done.forEach(function (it) {
+      var p = it.needle ? sourceContent.indexOf(it.needle) : -1, ln = p >= 0 ? lineOf(sourceContent, p) : it.line, ch = cs2 ? chunksForLines(cs2, ln, ln)[0] : null;
+      if (ch) { reg(ch); it.tag = tagOf(ch); } else it.tag = '@line' + ln;
+    });
+    return { ok: true, items: done, skipped: skipped };
+  }
+
+  function protocol() {
+    return [
+      '[PARTS PROTOCOL - applies to every message in this chat]',
+      '- The file is never sent whole; you only see PARTS. Part numbers change after every patch, so prefer names (@functionName); a number is valid only for the newest list.',
+      '- The code in THIS message is the only current version. Ignore every older copy in this chat.',
+      '- If you need code you were not shown, or you are not sure your copy is current, reply with ONLY @tags (one line). I will send those parts fresh. Never ask for the whole file.',
+      '- To change code reply with ONE code block: OLD' + SPL + 'NEW (several fixes: a line with only ' + BLK + ' between the pairs). OLD must be copied exactly from the parts shown now, unique in the file, and never contain "..." or "rest unchanged".',
+      '- If nothing must change reply exactly: NO CHANGE NEEDED - reason.'
+    ].join('\n');
+  }
+  function idxRules() {
+    return '[PARTS PROTOCOL] Part numbers change after every patch, so prefer names (@functionName); a number is valid only for this list. Never ask for the whole file. If no code change is needed reply exactly: NO CHANGE NEEDED - reason.';
+  }
+  function notice() {
+    var bits = [], names = [];
+    if (W.changes.length) {
+      W.changes.forEach(function (c) { c.items.forEach(function (it) { if (it.tag && names.indexOf(it.tag) < 0) names.push(it.tag); }); });
+      bits.push('This file was patched ' + W.changes.length + ' time(s) in this chat (parts touched: ' + (names.slice(-12).join(' ') || 'unknown') + '). Any older copy of those parts is STALE: request them with @tags before editing.');
+    }
+    if (W.outside) bits.push('The file was also changed outside the loop (undo, redo or manual edit) ' + W.outside + ' time(s): treat ALL earlier copies as stale.');
+    return bits.length ? '\n\n[NOTICE] ' + bits.join(' ') : '';
+  }
+  function changeLog() {
+    var l = W.changes.slice(-10).map(function (c, i) {
+      return (i + 1) + ') "' + clip(c.req, 40) + '": ' + c.items.map(function (it) { return it.tag + ' [' + it.oldFirst + ' => ' + it.newFirst + ']'; }).join('; ');
+    });
+    return 'PATCHES ALREADY APPLIED TO THIS FILE IN THIS CHAT (oldest first; your memory of those areas may be outdated):\n' + l.join('\n');
+  }
+  function partsMsg(found, notes, cs) {
+    var o = [], list, q, b, ot;
+    if (!S.sentSuper && typeof SUPER_PROMPT === 'string') o.push(SUPER_PROMPT);
+    S.sentSuper = true;
+    if (S.fails) o.push('(Your previous patch FAILED and nothing was applied. The text below is the CURRENT file.)');
+    o.push('REQUEST: ' + S.req);
+    if (notes && notes.length) o.push(notes.join('\n'));
+    if (!cs) {
+      o.push('=== FULL FILE (small file) ===\n' + sourceContent);
+    } else {
+      q = S.queue.map(function (en) { return findChunk(en, cs); }).filter(Boolean);
+      S.queue = [];
+      list = q.concat(found.filter(function (c) { return q.indexOf(c) < 0; }));
+      b = block(list, budget());
+      b.sent.forEach(reg);
+      if (b.skip.length) S.queue = b.skip.map(entryOf);
+      o.push('FRESH PARTS (current version; ignore any older copy of the same code):\n\n' + b.text);
+      if (b.skip.length) o.push('NOT SENT YET (size limit): ' + b.skip.map(tagOf).join(' ') + ' - they will be sent first if you ask for them again.');
+      ot = others(cs, b.sent);
+      if (ot) o.push(ot);
+    }
+    o.push('Now reply with the patch (OLD' + SPL + 'NEW in ONE code block, OLD copied exactly from the text above) or with ONLY @tags if you still need other parts. If nothing must change: NO CHANGE NEEDED - reason.');
+    return o.join('\n\n');
+  }
+  function listMsg(lead) {
+    return [
+      S.fails ? '(Your previous patch FAILED and nothing was applied.)' : '',
+      lead,
+      'REQUEST: ' + S.req,
+      'VALID PARTS (numbers and names are valid for the current file):',
+      partsList(sourceContent),
+      'Reply with ONLY @tags (names or numbers from this list) for the parts you need, or with the patch (OLD' + SPL + 'NEW in ONE code block), or with: NO CHANGE NEEDED - reason. Never ask for the whole file.'
+    ].filter(Boolean).join('\n\n');
+  }
+  function failMsg(res, same) {
+    var src = res.src || sourceContent, cs = chunksOf(src), lvl = Math.min(S.fails, 3), o = [], list = [], seen = {}, b, ot;
+    if (res.none) lvl = Math.max(lvl, 2);
+    function add(c) { if (c && !seen[c.n]) { seen[c.n] = 1; list.push(c); } }
+    o.push('PATCH RESULT: FAILED. NOTHING was applied: the file is exactly as it was before your reply (a patch is applied all-or-nothing).');
+    o.push('REQUEST (unchanged): ' + S.req);
+    if (same) o.push('NOTE: this patch is IDENTICAL to your previous failed one. Do not resend it unchanged.');
+    o.push(res.text);
+    if (!cs) {
+      o.push('=== FULL FILE (small file) ===\n' + src);
+    } else {
+      (res.spots || []).forEach(function (sp) { chunksForLines(cs, sp.a, sp.b).forEach(add); });
+      if (lvl >= 2 || ['placeholder', 'emptyold', 'unbalanced'].indexOf(res.kind) >= 0) sessionChunks(cs).forEach(add);
+      b = block(list, budget());
+      b.sent.forEach(reg);
+      if (b.text) o.push('CURRENT TEXT OF THE RELEVANT PARTS' + (src !== sourceContent ? ' (your earlier blocks of this patch are already applied in memory here)' : '') + ':\n\n' + b.text);
+      if (b.skip.length) o.push('NOT SENT (size limit): ' + b.skip.map(tagOf).join(' ') + ' - ask for them with @tags if you need them.');
+      if (lvl >= 3) o.push('ALL PARTS OF THE FILE:\n' + partsList(src));
+      else if (lvl >= 2) { ot = others(cs, b.sent); if (ot) o.push(ot); }
+    }
+    if (lvl >= 2 && W.changes.length) o.push(changeLog());
+    o.push('Reply with the corrected COMPLETE patch (every block again, OLD copied exactly from the current text above) or with ONLY @tags if you need other parts. Never the whole file.' + (lvl >= 3 ? ' Use the SMALLEST possible OLD (1 to 3 unique lines) and copy it character by character.' : '') + (S.fails >= MAX_FAILS ? ' THIS IS THE LAST TRY.' : ''));
+    return o.join('\n\n');
+  }
+
+  function stop(why) {
+    V.awaiting = false;
+    clearTimeout(V.timer); clearTimeout(V.watch);
+    if (S) S.stopped = true;
+    T('🥜 STOPPED: ' + why + '. Fix it by hand or press ▲ with a new request.', 10000);
+  }
+  function finish(msg) {
+    V.awaiting = false;
+    clearTimeout(V.watch);
+    if (S) S.done = true;
+    T('🥜 ' + msg, 6000);
+    try { document.getElementById('statusLeft').textContent = '🥜 ' + msg; } catch (e) {}
+  }
+  function post(text, why) {
+    if (!S || S.stopped) return false;
+    if (S.sends >= MAX_SENDS) { stop('more than ' + MAX_SENDS + ' messages for one request'); return false; }
+    S.sends++;
+    S.snap = snapshot();
+    V.awaiting = true;
+    V.sentAt = Date.now();
+    T('🥜 ' + why, 3500);
+    try { window.parent.postMessage({ sendToAI: String(text).replace(/\u200B/g, ''), nuts: true }, '*'); }
+    catch (e) { stop('could not post to the AI pane: ' + e.message); return false; }
+    clearTimeout(V.watch);
+    V.watch = setTimeout(function () {
+      if (V.awaiting && S && !S.stopped) T('🥜 Still waiting for the AI (' + Math.round((Date.now() - V.sentAt) / 60000) + ' min). Press ▲ to start over if it is stuck.', 9000);
+    }, 480000);
+    return true;
+  }
+  function fileCheck() {
+    var key = String(window._loadedRepo || '') + '|' + (fileHandle ? fileHandle.name : '');
+    if (W.key !== key) W = { key: key, reg: [], changes: [], expect: null, outside: 0 };
+    else if (W.expect !== null && sourceContent !== W.expect) W.outside++;
+    W.expect = sourceContent;
+  }
+  function begin(text) {
+    var box = document.getElementById('aiInstruction'), raw = box ? box.value : '', idx, m, re, cs0, ch;
+    clearTimeout(V.timer);
+    fileCheck();
+    idx = String(text).indexOf('[INDEX MODE') >= 0;
+    S = { req: raw.replace(/@[\w$-]+/g, ' ').replace(/\s+/g, ' ').trim() || '(no request text: see the parts below)', idx: idx, fails: 0, nudges: 0, sends: 0, askSigs: [], queue: [], lastFailSig: '', lastFail: null, unbalSig: '', sentSuper: !idx, snap: null, stopped: false, done: false };
+    S.snap = snapshot();
+    cs0 = chunksOf(sourceContent);
+    re = /=== PART (\d+) \(lines/g;
+    while ((m = re.exec(text)) !== null) { ch = cs0 ? cs0[+m[1] - 1] : null; if (ch) reg(ch); }
+    post(String(text).replace(/\u200B/g, '') + '\n\n' + (idx ? idxRules() : protocol()) + notice(), idx ? 'index sent to the AI' : 'code sent to the AI');
+    return true;
+  }
+
+  async function doPatch(patch) {
+    var my = S, sig = patch.length + ':' + patch.slice(0, 80) + ':' + patch.slice(-80), res, same = false;
+    if (S.lastFailSig === sig && S.lastFail && S.lastFail.kind !== 'unbalanced') { res = S.lastFail; same = true; }
+    else res = await applyPatch(patch, sig);
+    if (S !== my || S.stopped) return;
+    if (res.ok) {
+      S.fails = 0;
+      if (!res.items.length) { finish('Patch changed nothing (already applied or no-op)'); return; }
+      W.changes.push({ req: S.req, items: res.items.slice(0, 6) });
+      if (W.changes.length > 30) W.changes.shift();
+      finish('Patch applied: ' + res.items.length + ' block(s)' + (res.skipped.length ? ', ' + res.skipped.length + ' skipped (already present)' : '') + '. Loop finished. Press the push button when happy.');
+      return;
+    }
+    S.fails++;
+    S.lastFailSig = sig;
+    S.lastFail = res;
+    try { showErr('NUTS: patch FAILED (' + res.kind + '), nothing applied:\n' + String(res.text).slice(0, 700)); } catch (e) {}
+    if (S.fails > MAX_FAILS) { stop('the patch failed ' + MAX_FAILS + ' times in a row'); return; }
+    post(failMsg(res, same), 'patch failed (' + res.kind + '): error + current parts sent (try ' + S.fails + '/' + MAX_FAILS + ')');
+  }
+
+  async function handleReply(d) {
+    var text = String(d.aiReply || ''), codes, patch, tags, cs, r, unk, wantAll, notes = [], sig, same, junkFree;
+    codes = (d.aiCode || []).filter(function (c) { return RE_SPL.test(c); });
+    patch = codes.length ? codes.join('\n' + BLK + '\n') : (RE_SPL.test(text) ? text : '');
+    if (patch) { S.nudges = 0; await doPatch(patch); return; }
+    if (/(^|\n)[\s*_#>-]*NO CHANGE NEEDED/i.test(text)) { finish('The AI says no change is needed'); return; }
+    cs = chunksOf(sourceContent);
+    tags = uniq(text.match(/@[\w$-]+/g) || []);
+    wantAll = tags.some(function (t) { return ALL.test(t); }) || (text.length < 1500 && /\b(whole|entire|full|complete)\s+(file|code|source)\b/i.test(text));
+    junkFree = tags.filter(function (t) { return !JUNK.test(t) && !ALL.test(t); });
+    if (!cs) {
+      S.nudges++;
+      if (S.nudges > MAX_NUDGES) { stop('the AI answered ' + MAX_NUDGES + ' times without a patch'); return; }
+      post(partsMsg([], ['Your last reply had no patch. The current file (it is small) is below.'], null), 'small file sent again');
+      return;
+    }
+    r = resolveTags(junkFree, cs);
+    unk = r.unknown.filter(function (t) { return /^@(part|p)\d+/i.test(t) || text.length < 800; });
+    if (unk.length) notes.push('These tags do not exist and were ignored: ' + unk.join(' ') + '.');
+    if (wantAll) notes.push('The whole file is never sent. Ask for parts by @name or @partN.');
+    if (r.found.length) {
+      S.nudges = 0;
+      sig = r.found.map(function (c) { return c.n; }).join(',');
+      same = S.askSigs.filter(function (x) { return x === sig; }).length;
+      S.askSigs.push(sig);
+      if (same >= MAX_SAME) { stop('the AI keeps asking for the same parts and never gives a patch'); return; }
+      if (same >= 1) notes.push('NOTE: you already received exactly these parts ' + same + ' time(s) for this request. Reply with the patch now, or with different @tags, or NO CHANGE NEEDED - reason.');
+      post(partsMsg(r.found, notes, cs), 'sent ' + r.found.length + ' part(s) the AI asked for');
+      return;
+    }
+    S.nudges++;
+    if (S.nudges > MAX_NUDGES) { stop('the AI answered ' + MAX_NUDGES + ' times without a patch or valid @tags'); return; }
+    post(listMsg(notes.length ? notes.join('\n') : 'Your last reply contained no patch and no usable @tags, so I cannot act on it.'), 'nudge sent (no patch, no valid tags)');
+  }
+
+  function onReply(d) {
+    if (!S || S.stopped || !V.awaiting) { T('AI reply ignored (the loop is not waiting for one)', 2500); return; }
+    V.reply = d;
+    clearTimeout(V.timer);
+    T('📨 AI reply received (' + d.aiReply.length + ' chars), checking in a moment', 2500);
+    V.timer = setTimeout(function () {
+      var my = S;
+      if (V.busy || !my || my.stopped) return;
+      V.busy = true;
+      V.awaiting = false;
+      handleReply(V.reply).catch(function (err) {
+        console.error(err);
+        T('🥜 internal error: ' + (err && err.message), 9000);
+        if (S === my) stop('internal error');
+      }).then(function () { V.busy = false; });
+    }, d.aiFinal === true ? 1500 : 6000);
+  }
+
+  var send0 = window.__extSend;
+  window.__extSend = function (text) {
+    if (window.__NUTS === true && window.__NUTS_V2 === true) {
+      try { return begin(text); } catch (e) { console.error(e); T('🥜 V2 error: ' + e.message + ' (using the old send)', 8000); }
+    }
+    return send0 ? send0(text) : false;
+  };
+  window.addEventListener('message', function (e) {
+    var d = e.data;
+    if (e.source !== window.parent || !d || typeof d.aiReply !== 'string') return;
+    if (window.__NUTS !== true || window.__NUTS_V2 !== true) return;
+    e.stopImmediatePropagation();
+    onReply(d);
+  }, true);
+  setInterval(function () {
+    if (window.__NUTS !== true && (S || V.awaiting)) { S = null; V.awaiting = false; clearTimeout(V.timer); clearTimeout(V.watch); }
+  }, 700);
+  window.__nutsV2State = function () { return { S: S, W: W, V: V }; };
+  window.__nutsV2Feed = function (txt) { onReply({ aiReply: String(txt), aiCode: [], aiFinal: true }); };
+})();
+</script>
 </body>
 </html>
