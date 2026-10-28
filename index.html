@@ -2200,6 +2200,7 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
                   lastSeen = lastClip;
           setTimeout(function () {
             box.value = saved;
+            if (inFrame) { request = ''; armedTags = []; }
             busy = false;
             paintBtn();
           }, 300);
@@ -2208,8 +2209,8 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
     }
 
     function check() {
-      if (window.__extBridge) return;
-            if (!on || !watching || busy || reading || !sourceContent) return;
+      // clipboard check also runs inside the extension: copy @parts or a patch, then tap this pane
+            if (!on || (!watching && !inFrame) || busy || reading || !sourceContent) return;
       var bridge = !!(window.AndroidClipboard && typeof window.AndroidClipboard.read === 'function');
       if (!bridge && !document.hasFocus()) return;
       reading = true;
@@ -2219,9 +2220,9 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
         text = text || '';
         if (text === lastSeen) return;
         lastSeen = text;
-        if (!watching || !text.trim()) return;
+        if ((!watching && !inFrame) || !text.trim()) return;
         if (text.indexOf('\u200B\u200B\u200B') >= 0 || text.indexOf('LITE MODE') >= 0 || text.indexOf('INDEX MODE') >= 0) return;
-        if (text.indexOf(SPLIT_MARK) >= 0) { disarm('✅ Patch received — auto-patch finished. Press ⌘ to apply.'); return; }
+        if (text.indexOf(SPLIT_MARK) >= 0) { if (inFrame && window.__extApplyPatch) { window.__extApplyPatch(text); return; } disarm('✅ Patch received — auto-patch finished. Press ⌘ to apply.'); return; }
         if (text.length > 4000) return;
         var found = (text.match(/@[\w$-]+/g) || []).filter(function (t, i, a) {
           return a.indexOf(t) === i && isKnownTag(t);
@@ -2271,7 +2272,7 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
     });
 
     document.addEventListener('visibilitychange', function () { if (!document.hidden) check(); });
-        window.addEventListener('pointerdown', function () { check(); }, true);
+        window.addEventListener('pointerdown', function () { check(); setTimeout(check, 200); }, true);
         window.addEventListener('touchstart', function () { check(); }, true);
     window.addEventListener('focus', check);
     paintBtn();
@@ -2302,6 +2303,7 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
       });
     }
   
+    window.__extApplyPatch = function (t) { applyPatch(t); };
     function applyPatch(text) {
       var old = window.AndroidClipboard;
       window.AndroidClipboard = { read: function () { return text; } };
@@ -2315,6 +2317,7 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
       if (!d || typeof d.aiReply !== 'string') return;
       if (window._autoIsOn && !window._autoIsOn()) return;
       var text = d.aiReply;
+      toast('📨 AI reply received (' + text.length + ' chars, ' + (text.match(/@[\w$-]+/g) || []).length + ' tags)', 2500);
       if (window._autoRelease) window._autoRelease();
       var codes = (d.aiCode || []).filter(function (c) { return c.indexOf(SPLIT_MARK) >= 0; });
       if (codes.length || text.indexOf(SPLIT_MARK) >= 0) {
