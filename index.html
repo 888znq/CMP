@@ -2222,7 +2222,8 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
           return a.indexOf(t) === i && isKnownTag(t);
         });
         if (!found.length) return;
-        fire(found);
+        if (!request) request = text.replace(/@[\w$-]+/g, ' ').replace(/\s+/g, ' ').trim();
+                fire(found);
       }, function () { reading = false; });
     }
 
@@ -2238,6 +2239,16 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
       startTimer();
     };
     window._autoRelease = function () { if (watching) disarm(); };
+        window._autoRearm = function () {
+          if (!on) return;
+          request = '';
+          armedTags = [];
+          watching = true;
+          lastSeen = lastClip;
+          busy = false;
+          paintBtn();
+          startTimer();
+        };
 
     btn.addEventListener('click', function () {
       on = !on;
@@ -2359,6 +2370,7 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
     pendingOldCode = null;
     ind.textContent = '📋 Patch: Ready';
     ind.className = allOk ? 'active' : '';
+        if (allOk && window._autoRearm) window._autoRearm();
     if (allOk) {
       document.getElementById('statusLeft').textContent = `✨ Patch applied @ ${new Date().toLocaleTimeString()}`;
       if (blocks.length > 1) toast(`⚡ ${blocks.length} patches applied!`);
