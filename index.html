@@ -2125,7 +2125,7 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
     var SPLIT_MARK = '===' + 'SPLIT' + '===';
     var on = true;
     try { on = localStorage.getItem('aicompiler_autopatch') !== 'off'; } catch (e0) {}
-    var watching = false, request = '', lastSeen = null, busy = false, reading = false, timer = null;
+    var watching = false, request = '', lastSeen = null, busy = false, reading = false, timer = null, armedTags = [];
     var basePlaceholder = box.placeholder;
 
     var css = document.createElement('style');
@@ -2184,14 +2184,16 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
 
     function fire(tags) {
       busy = true;
-      var saved = box.value, before = lastClip, n = 0;
-      box.value = (request + ' ' + tags.join(' ')).trim();
+      var saved = box.value, before = window._payloadSeq || 0, n = 0;
+            tags.forEach(function (t) { if (armedTags.indexOf(t) < 0) armedTags.push(t); });
+            box.value = (request + ' ' + armedTags.join(' ')).trim();
       toast('⚡ Auto-patch: ' + tags.length + ' part(s) — payload copied, paste it to the AI');
       payloadBtn.click();
       var iv = setInterval(function () {
         n++;
-        if (lastClip !== before || n > 50) {
-          clearInterval(iv);
+        if ((window._payloadSeq || 0) !== before || n > 50) {
+                  clearInterval(iv);
+                  lastSeen = lastClip;
           setTimeout(function () {
             box.value = saved;
             busy = false;
@@ -2206,7 +2208,8 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
       var bridge = !!(window.AndroidClipboard && typeof window.AndroidClipboard.read === 'function');
       if (!bridge && !document.hasFocus()) return;
       reading = true;
-      readClip().then(function (text) {
+            setTimeout(function () { reading = false; }, 3000);
+            readClip().then(function (text) {
         reading = false;
         text = text || '';
         if (text === lastSeen) return;
@@ -2226,6 +2229,7 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
     window._autoArm = function (req) {
       if (!on) return;
       request = req || '';
+            armedTags = [];
       watching = true;
       lastSeen = null;
       busy = false;
@@ -2250,6 +2254,8 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
     });
 
     document.addEventListener('visibilitychange', function () { if (!document.hidden) check(); });
+        window.addEventListener('pointerdown', function () { check(); }, true);
+        window.addEventListener('touchstart', function () { check(); }, true);
     window.addEventListener('focus', check);
     paintBtn();
   })();
@@ -2287,6 +2293,7 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
       isInternalCopy = true;
       lastClip = payload;
       await navigator.clipboard.writeText(payload);
+            window._payloadSeq = (window._payloadSeq || 0) + 1;
       setTimeout(() => { isInternalCopy = false; }, 1500);
       toast(_idx ? "🧭 Index copied (no code) — paste to Claude, copy its reply — auto-patch does the rest" : "🚀 Payload Copied! Paste it into Claude.");
       if (_hasTags || _auto) { var _bx = document.getElementById('aiInstruction'); _bx.value = _bx.value.replace(/\s*@[\w$-]+/g, '').trim(); }
