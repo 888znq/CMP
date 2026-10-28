@@ -2124,7 +2124,7 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
     if (!box || !payloadBtn) return;
     var SPLIT_MARK = '===' + 'SPLIT' + '===';
     var on = true;
-    try { on = localStorage.getItem('aicompiler_autopatch') !== 'off'; } catch (e0) {}
+    var inFrame = (window.parent !== window);   // inside the extension pane = always armed; manual mode lasts one session only
     var watching = false, request = '', lastSeen = null, busy = false, reading = false, timer = null, armedTags = [];
     var basePlaceholder = box.placeholder;
 
@@ -2132,6 +2132,7 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
     css.textContent =
       'html body.compact-layout #controlBar #autoPatchBtn{background:#E2E8F0 !important;flex:0 0 auto !important;min-width:34px !important;padding:0 12px !important;font-size:14px !important;display:inline-flex !important;align-items:center !important;justify-content:center !important;}' +
       'html body.compact-layout #controlBar #autoPatchBtn.ap-on{background:#7df5c0 !important;}' +
+      'html body.compact-layout #controlBar #autoPatchBtn.ap-armed{background:#FFD700 !important;}' +
       'html body.compact-layout #controlBar #autoPatchBtn.ap-watch{background:#FFD700 !important;animation:apPulse 1.1s ease-in-out infinite alternate;}' +
       '@keyframes apPulse{from{opacity:.55}to{opacity:1}}' +
       'html body.compact-layout #controlBar #aiInstruction.ap-watch::placeholder{color:#000432 !important;-webkit-text-fill-color:#000432 !important;opacity:1 !important;font-weight:800 !important;}';
@@ -2144,11 +2145,14 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
     payloadBtn.parentNode.insertBefore(btn, payloadBtn.nextSibling);
 
     function paintBtn() {
-      btn.classList.toggle('ap-on', on && !watching);
-      btn.classList.toggle('ap-watch', on && watching);
-      box.classList.toggle('ap-watch', on && watching);
-      box.placeholder = (on && watching) ? '👁 Auto-patch: copy the AI reply…' : basePlaceholder;
+      var w = watching && !inFrame;
+      btn.classList.toggle('ap-on', on && !w && !inFrame);
+      btn.classList.toggle('ap-armed', on && inFrame);
+      btn.classList.toggle('ap-watch', on && w);
+      box.classList.toggle('ap-watch', on && w);
+      box.placeholder = (on && w) ? '👁 Auto-patch: copy the AI reply…' : basePlaceholder;
       btn.title = !on ? 'Manual mode (auto-patch OFF) — click to turn ON'
+        : inFrame ? 'ARMED: replies with @parts build the payload, replies with a patch are applied. Click for manual mode'
         : watching ? 'Auto-patch is watching the clipboard — click for manual mode'
         : 'Auto-patch ON — press ▲ with your prompt to start. Click for manual mode';
     }
@@ -2254,7 +2258,7 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
 
     btn.addEventListener('click', function () {
       on = !on;
-      try { localStorage.setItem('aicompiler_autopatch', on ? 'on' : 'off'); } catch (e2) {}
+      // manual mode lasts for this session only, so a reload is always armed again
       if (!on) {
         var req = request;
         disarm();
@@ -2281,7 +2285,9 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
     var applyBtn = document.getElementById('pasteAndProcessBtn');
     var SPLIT_MARK = '===' + 'SPLIT' + '===';
   
+    window.__AI_AUTO_PASTE = false;   // false = payload is only copied and you paste it into the AI yourself; true = old auto-paste
     window.__extSend = function (text) {
+      if (window.__AI_AUTO_PASTE !== true) return false;
       if (window._autoIsOn && !window._autoIsOn()) return false;
       try { window.parent.postMessage({ sendToAI: String(text).replace(/\u200B/g, '') }, '*'); return true; }
       catch (e) { return false; }
