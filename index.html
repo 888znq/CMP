@@ -1473,13 +1473,30 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
     try {
       const report = `PATCH ERROR — please fix and resend the patch.\n\nError: ${_lastErrMsg}`;
       isInternalCopy = true;
-      await navigator.clipboard.writeText(report);
+      var how = await window.__copyText(report);
       setTimeout(() => { isInternalCopy = false; }, 1500);
+      if (how === 'parent') {
+        var copied = false;
+        await new Promise(function (res) {
+          var onCopy = function (ev) {
+            if (ev.source !== window.parent || !ev.data || typeof ev.data.copyResult !== 'boolean') return;
+            copied = ev.data.copyResult;
+            window.removeEventListener('message', onCopy);
+            res();
+          };
+          window.addEventListener('message', onCopy);
+          setTimeout(function () { window.removeEventListener('message', onCopy); res(); }, 2000);
+        });
+        if (!copied) return;
+      }
+      toast('✅ Error copied — paste it to the AI', 2500);
+      closeErrOverlay();
       document.getElementById('errCopyBtn').textContent = '✅ Copied!';
       setTimeout(() => { document.getElementById('errCopyBtn').textContent = '📋 Copy Error'; }, 2000);
     } catch(e) { toast("❌ Copy failed"); }
   });
-  document.getElementById('errDismissBtn').addEventListener('click', () => { $errOverlay.style.display = 'none'; });
+  function closeErrOverlay() { try { $errOverlay.style.display = 'none'; } catch (e) {} }
+  document.getElementById('errDismissBtn').addEventListener('click', closeErrOverlay);
 
   // ── AST Panel ─────────────────────────────────────────────────────────
   const $astPanel   = document.getElementById('astPanel');
@@ -2300,7 +2317,7 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
         if (text === lastSeen) return;
         lastSeen = text;
         if ((!watching && !inFrame) || !text.trim()) return;
-        if (text.indexOf('\u200B\u200B\u200B') >= 0 || text.indexOf('LITE MODE') >= 0 || text.indexOf('INDEX MODE') >= 0) return;
+        if (/^\s*PATCH ERROR/.test(text) || text.indexOf('\u200B\u200B\u200B') >= 0 || text.indexOf('LITE MODE') >= 0 || text.indexOf('INDEX MODE') >= 0) return;
         if (text.indexOf(SPLIT_MARK) >= 0) { if (inFrame) { if (window.__CLIP_AUTO_APPLY !== false && window.__extApplyPatch) window.__extApplyPatch(text); return; } disarm('✅ Patch received — auto-patch finished. Press ⌘ to apply.'); return; }
         if (text.length > 4000) return;
         var found = (text.match(/@[\w$-]+/g) || []).filter(function (t, i, a) {
