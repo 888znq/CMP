@@ -2368,6 +2368,68 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
     }
   
     window.__extApplyPatch = function (t) { applyPatch(t); };
+    
+    // ── TOTAL NUTS MODE (separate button, default OFF) ──
+    window.__NUTS = false;
+    var NUTS_FAST_DELAY = 2000;
+    var NUTS_SLOW_DELAY = 6000;
+    var nutsTimer = 0;
+    var nutsSeen = '';
+    var nutsOrigSend = window.__extSend;
+    window.__extSend = function (text) {
+      if (window.__NUTS !== true) return nutsOrigSend ? nutsOrigSend(text) : false;
+      nutsSeen = '';
+      try { window.parent.postMessage({ sendToAI: String(text).replace(/\u200B/g, ''), nuts: true }, '*'); return true; }
+      catch (e) { return false; }
+    };
+    var nutsStyle = document.createElement('style');
+    nutsStyle.textContent =
+      'html body.compact-layout #controlBar #nutsBtn{background:#E2E8F0 !important;flex:0 0 auto !important;min-width:34px !important;padding:0 12px !important;font-size:14px !important;display:inline-flex !important;align-items:center !important;justify-content:center !important;}' +
+      'html body.compact-layout #controlBar #nutsBtn.nuts-on{background:#ff4d4d !important;animation:nutsPulse 1s ease-in-out infinite alternate;}' +
+      '@keyframes nutsPulse{from{opacity:.6}to{opacity:1}}';
+    document.head.appendChild(nutsStyle);
+    var nutsBtn = document.createElement('button');
+    nutsBtn.id = 'nutsBtn';
+    nutsBtn.className = 'btn';
+    nutsBtn.textContent = '🥜';
+    nutsBtn.title = 'Total nuts mode (OFF): auto-paste into the AI, keep it scrolled until the reply is complete, then apply the patch';
+    var nutsAnchor = document.getElementById('autoPatchBtn') || payloadBtn;
+    nutsAnchor.parentNode.insertBefore(nutsBtn, nutsAnchor.nextSibling);
+    function nutsPost(on) {
+      try { window.parent.postMessage({ nutsMode: on }, '*'); } catch (e) {}
+    }
+    function nutsApply(patchText, isFinal) {
+      clearTimeout(nutsTimer);
+      toast(isFinal ? '🥜 Reply finished: applying patch…' : '🥜 Making sure the reply is complete…', 3000);
+      nutsTimer = setTimeout(function () {
+        nutsTimer = 0;
+        if (window.__NUTS !== true) return;
+        var sig = patchText.length + ':' + patchText.slice(0, 60) + ':' + patchText.slice(-60);
+        if (sig === nutsSeen) { toast('🥜 Same patch already applied, skipped', 3000); return; }
+        nutsSeen = sig;
+        applyPatch(patchText);
+      }, isFinal ? NUTS_FAST_DELAY : NUTS_SLOW_DELAY);
+    }
+    nutsBtn.addEventListener('click', function () {
+      window.__NUTS = !window.__NUTS;
+      clearTimeout(nutsTimer);
+      nutsTimer = 0;
+      nutsSeen = '';
+      nutsBtn.classList.toggle('nuts-on', window.__NUTS === true);
+      nutsBtn.title = 'Total nuts mode (' + (window.__NUTS ? 'ON' : 'OFF') + ')';
+      nutsPost(window.__NUTS === true);
+      toast(window.__NUTS ? '🥜 NUTS MODE ON: auto paste + auto patch after the full reply' : '🖐 Nuts mode OFF', 4000);
+    });
+    window.addEventListener('message', function (e) {
+      var d = e.data;
+      if (e.source !== window.parent || !d || typeof d.aiReply !== 'string' || window.__NUTS !== true) return;
+      var nutsSplit = '===' + 'SPLIT' + '===';
+      var nutsBlock = '\n===' + 'BLOCK' + '===\n';
+      var codes = (d.aiCode || []).filter(function (c) { return c.indexOf(nutsSplit) >= 0; });
+      var patchText = codes.length ? codes.join(nutsBlock) : (d.aiReply.indexOf(nutsSplit) >= 0 ? d.aiReply : '');
+      if (patchText) nutsApply(patchText, d.aiFinal === true);
+    });
+    nutsPost(false);
     window.__extCopy = function (text) {
       try { window.parent.postMessage({ copyToClipboard: String(text) }, '*'); return true; }
       catch (e) { return false; }
@@ -2387,7 +2449,9 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
     // ON = payload auto-pastes into the AI pane, the AI pane is force-scrolled while it generates,
     // and the patch is applied only after the reply is fully finished.
     window.__NUTS = false;
-    var NUTS_FAST_DELAY = 2000;   // reply confirmed final by the AI pane
+    if (!document.getElementById('nutsBtn')) {
+        if (!document.getElementById('nutsBtn')) {
+            var NUTS_FAST_DELAY = 2000;   // reply confirmed final by the AI pane
     var NUTS_SLOW_DELAY = 6000;   // reply not confirmed final: wait longer before touching the app
     var nutsTimer = 0;
     var nutsSeen = '';
@@ -2426,10 +2490,12 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
       nutsSeen = '';
       nutsBtn.classList.toggle('nuts-on', window.__NUTS === true);
       nutsBtn.title = 'Total nuts mode (' + (window.__NUTS ? 'ON' : 'OFF') + '): auto-paste into the AI, keep the AI scrolled until the reply is complete, then apply the patch by itself';
-      nutsPost(window.__NUTS === true);
-      toast(window.__NUTS ? '🥜 NUTS MODE ON: auto paste + auto patch after the full reply' : '🖐 Nuts mode OFF', 4000);
-    });
-    nutsPost(false);
+            nutsPost(window.__NUTS === true);
+            toast(window.__NUTS ? '🥜 NUTS MODE ON: auto paste + auto patch after the full reply' : '🖐 Nuts mode OFF', 4000);
+          });
+          nutsPost(false);
+          }
+          }
     
     function applyPatch(text) {
       var old = window.AndroidClipboard;
@@ -2961,12 +3027,15 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
 <!-- ── PWA Configuration: Service Worker Registration ── -->
 <script>
   if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-      navigator.serviceWorker.register('service-worker.js').catch((err) => {
-        console.warn('Service worker registration failed:', err);
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.getRegistrations().then((regs) => {
+          regs.forEach((r) => { r.unregister(); });
+        }).catch(() => {});
+        if (window.caches && caches.keys) {
+          caches.keys().then((ks) => { ks.forEach((k) => { caches.delete(k); }); }).catch(() => {});
+        }
       });
-    });
-  }
+    }
 </script>
 </body>
 </html>
