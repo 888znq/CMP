@@ -105,32 +105,9 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #000432; f
 }
 #shortcutBar .sc-lock-btn:hover { border-color: #ffffff; color: #000432; background: #ffffff; }
 #shortcutBar .sc-lock-btn.locked { border-color: #ffffff; color: #000432; background: #ffffff; }
-#shortcutBar .sc-collapse-btn {
-  background: #000432; border: 1px solid #ffffff;
-  color: #ffffff; padding: 3px 7px; border-radius: 6px;
-  font: 700 11px/1 'JetBrains Mono', monospace;
-  cursor: pointer; white-space: nowrap; flex-shrink: 0; transition: all 0.15s;
-}
-#shortcutBar .sc-collapse-btn:hover { border-color: #ffffff; color: #000432; background: #ffffff; }
-#shortcutBar .sc-collapse-btn.collapsed { border-color: #ffffff; color: #000432; background: #ffffff; }
 
-/* ── UI Collapsed State ── */
-body.ui-collapsed #repoBar,
-body.ui-collapsed #controlBar,
-body.ui-collapsed #statusBar { display: none !important; }
-body.ui-collapsed #shortcutBar { bottom: 0; height: 44px; border-top: 1px solid rgba(255,255,255,0.4); box-shadow: 0 -4px 20px rgba(255,255,255,0.08); }
-body.ui-collapsed #preview { bottom: 44px; height: calc(100% - 44px); }
-body.ui-collapsed #codeView { bottom: 44px; height: calc(100% - 44px); }
-body.ui-collapsed #fring { bottom: 44px; }
-body.ui-collapsed #ghConfigPanel { bottom: 50px; }
-body.ui-collapsed #toast { bottom: 52px; }
-
-/* ── Compact Layout (single bottom bar: repos | input | toggles | undo/redo/push) ──
-   Nothing below is deleted or rewritten — every original element, id, class,
-   listener and function stays exactly as it was. This block only hides the
-   pieces that aren't in the new layout and re-flows everything that remains
-   (#repoBar + #controlBar) into one merged row. Toggle off by removing
-   "compact-layout" from <body> to instantly get the original full UI back. */
+/* ── Compact Layout (single bottom bar: repos | input | toggles | buttons) ──
+   Remove "compact-layout" from <body> to get the original full UI back. */
 body.compact-layout #bridgeIndicator,
 body.compact-layout #statusBar,
 body.compact-layout #shortcutBar { display: none !important; }
@@ -150,15 +127,8 @@ body.compact-layout #controlBar .ctrl-sep { display: none !important; }
 body.compact-layout #scanBtn,
 body.compact-layout #replaceAllBtn,
 body.compact-layout #tagsBtn { display: none !important; }
-body.compact-layout #scanBtn,
-body.compact-layout #replaceAllBtn,
-body.compact-layout #tagsBtn { display: none !important; }
 
-/* Repo bar: no longer its own fixed row — now flows inline on the left
-   edge of #controlBar (moved in the markup to be its first child).
-   Reserved at a firm 40% of the bar width. Tabs wrap and shrink to fit
-   so every repo stays visible (expanded) at once, no horizontal scroll,
-   and the layout adjusts itself automatically as repos are added. */
+/* Repo bar: flows inline at the left edge of #controlBar, 40% of the width. */
 body.compact-layout #repoBar {
   position: static; height: 100%; width: 40%; max-width: 40%; flex: 0 0 40%;
   display: flex; align-items: center; justify-content: flex-start;
@@ -175,20 +145,6 @@ body.compact-layout #controlBar {
   border-top: 1px solid #ffffff; border-bottom: none;
   padding: 0 6px; gap: 4px;
 }
-/* Remaining 60% (after the repo bar's firm, protected 40%) lives entirely
-   inside #bottom-controls, since #aiInstruction is a child of it. #controls
-   (undo/redo) and #git-controls (push/new-repo) are small fixed-content
-   sibling groups outside #bottom-controls — they're left at natural width
-   and given flex-shrink so the row never overflows 100%, while
-   #bottom-controls grows to absorb whatever space remains after repoBar's
-   40% and their natural width (in practice that's ~60%, since their
-   natural content width is small relative to the full bar).
-
-   Inside #bottom-controls, #aiInstruction takes a grow-weight of 1 and
-   every other child (toggles + payload/patch buttons) shares a combined
-   grow-weight of 2 — a 1:2 ratio that lands the input at ≈20% of the full
-   bar and the buttons/toggles at ≈40%, matching #controls/#git-controls'
-   natural sizing being comparatively small. */
 body.compact-layout #bottom-controls {
   flex: 1 1 auto; min-width: 0; display: flex; align-items: center;
   gap: 4px; overflow: visible;
@@ -230,11 +186,6 @@ body.compact-layout #payloadToggles {
 }
 body.compact-layout #payloadToggles label { font-size: 10px; gap: 3px; }
 body.compact-layout #payloadToggles input[type="checkbox"] { width: 13px; height: 13px; }
-/* Repo tabs: white-bordered name pills (full name available via the title=
-   tooltip on hover/long-press, abbreviated visually via text overflow).
-   Each tab grows to fill the available 40% space evenly and shrinks
-   automatically as more repos are added — no edits needed when new repos
-   show up. */
 body.compact-layout #repoBar .repo-btn {
   flex: 1 1 0; min-width: 0; max-width: none; height: 18px;
   padding: 0 6px; border-radius: 4px; font-size: 8px; color: #ffffff;
@@ -419,8 +370,6 @@ button.btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none !import
 #errOverlay .err-btn.copy { border-color: #ffffff; color: #ffffff; background: rgba(255,255,255,0.1); }
 #errOverlay .err-btn.copy:hover { background: rgba(255,255,255,0.25); }
 
-#modeToggle { display: none; align-items: center; flex-shrink: 0; }
-
 /* ── GitHub Config Panel ── */
 #ghConfigPanel {
   position: fixed; bottom: 72px; right: 16px; z-index: 300;
@@ -455,8 +404,8 @@ button.btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none !import
 #ghConfigPanel .gh-add-row { display: flex; gap: 6px; }
 #ghConfigPanel .gh-add-row input { flex: 1; font-size: 10px; }
 
-/* ── Push Button ── */
-#pushBtn {
+/* ── Push / GH Settings / New Repo / Repo Visibility buttons (shared look) ── */
+#pushBtn, #ghSettingsBtn, #ghNewRepoBtn, #repoVisBtn {
   background: #000432; border: 1px solid #ffffff;
   color: #ffffff; height: 26px; min-width: 26px; padding: 0 8px; border-radius: 6px;
   font: 700 13px/1 'JetBrains Mono', monospace;
@@ -468,36 +417,9 @@ button.btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none !import
 #pushBtn.pushing { border-color: #ffffff; color: #ffffff; animation: pushpulse 0.7s infinite alternate; }
 @keyframes pushpulse { from { opacity: 0.5; } to { opacity: 1; } }
 
-#ghSettingsBtn {
-  background: #000432; border: 1px solid #ffffff;
-  color: #ffffff; height: 26px; min-width: 26px; padding: 0 8px; border-radius: 6px;
-  font: 700 13px/1 'JetBrains Mono', monospace;
-  cursor: pointer; flex-shrink: 0; transition: all 0.15s;
-  display: inline-flex; align-items: center; justify-content: center;
-}
-#ghSettingsBtn:hover { background: #ffffff; color: #000432; border-color: #ffffff; }
-#ghSettingsBtn.active { background: #ffffff; color: #000432; border-color: #ffffff; }
-
-#ghNewRepoBtn {
-  background: #000432; border: 1px solid #ffffff;
-  color: #ffffff; height: 26px; min-width: 26px; padding: 0 8px; border-radius: 6px;
-  font: 700 13px/1 'JetBrains Mono', monospace;
-  cursor: pointer; flex-shrink: 0; transition: all 0.15s;
-  display: inline-flex; align-items: center; justify-content: center;
-}
-#ghNewRepoBtn:hover { background: #ffffff; color: #000432; border-color: #ffffff; }
+#ghSettingsBtn:hover, #ghNewRepoBtn:hover, #repoVisBtn:hover { background: #ffffff; color: #000432; border-color: #ffffff; }
+#ghSettingsBtn.active, #repoVisBtn.active { background: #ffffff; color: #000432; border-color: #ffffff; }
 #ghNewRepoBtn:disabled { opacity: 0.4; cursor: not-allowed; }
-
-/* ── Repo Visibility Toggle Button ── */
-#repoVisBtn {
-  background: #000432; border: 1px solid #ffffff;
-  color: #ffffff; height: 26px; min-width: 26px; padding: 0 8px; border-radius: 6px;
-  font: 700 13px/1 'JetBrains Mono', monospace;
-  cursor: pointer; flex-shrink: 0; transition: all 0.15s;
-  display: inline-flex; align-items: center; justify-content: center;
-}
-#repoVisBtn:hover { background: #ffffff; color: #000432; border-color: #ffffff; }
-#repoVisBtn.active { background: #ffffff; color: #000432; border-color: #ffffff; }
 
 /* ── Repo Visibility Modal ── */
 #repoVisModal {
@@ -623,11 +545,9 @@ button.btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none !import
 }
 #bridgeIndicator.active { border-color: #ffffff; color: #ffffff; box-shadow: 0 0 8px #ffffff; }
 #bridgeIndicator.receiving { border-color: #ffffff; color: #ffffff; box-shadow: 0 0 8px #ffffff; }
-#bridgeIndicator.error { border-color: #ffffff; color: #ffffff; }
 
 /* ===== SIGPILL: BOTTOM BAR ===== */
 html body.compact-layout #controlBar{left:6px !important;right:auto !important;width:calc(100% - 12px) !important;padding:0 !important;gap:1.5px !important;align-items:stretch !important;background:#000432 !important;border:0 !important;border-radius:999px !important;overflow:hidden !important;box-shadow:none !important;}
-html body.compact-layout #controlBar #repoBar,
 html body.compact-layout #controlBar #bottom-controls,
 html body.compact-layout #controlBar #controls,
 html body.compact-layout #controlBar #git-controls{display:contents !important;}
@@ -723,13 +643,12 @@ html body.compact-layout #controlBar select:focus{outline:0 !important;box-shado
       <label title="Include the base system prompt"><input type="checkbox" id="incSuperPrompt" checked></label>
       <label title="Include your typed instructions"><input type="checkbox" id="incInstructions" checked></label>
       <label title="Include the current source code"><input type="checkbox" id="incSource" checked></label>
-            <label title="Lite: send only the relevant parts of a big file"><input type="checkbox" id="incLite" checked></label>
+      <label title="Lite: send only the relevant parts of a big file"><input type="checkbox" id="incLite" checked></label>
     </div>
     <button id="payloadBtn" class="btn" style="border-color:#ffffff;color:#ffffff;" title="Build &amp; copy payload">▲</button>
     <button id="scanBtn" class="btn" style="border-color:#ffffff;color:#ffffff;" title="Scan the whole file for the text in the instruction box and copy a report">🔍</button>
     <button id="replaceAllBtn" class="btn" style="border-color:#ffffff;color:#ffffff;" title="Replace everywhere: type  old => new  in the instruction box">🔁</button>
     <button id="tagsBtn" class="btn" style="border-color:#ffffff;color:#ffffff;" title="Copy Claude's reply first, then press: adds its @tags to the instruction box">📎</button>
-        <button id="partsBtn" class="btn" style="border-color:#ffffff;color:#ffffff;" title="Browse every @part: search, preview, copy tag or code, multi-select">🧩</button>
     <button id="pasteAndProcessBtn" class="btn" style="border-color:#ffffff;color:#ffffff;" title="Read clipboard now and apply the patch (supports OLD===SPLIT===NEW and ===BLOCK=== formats)">&#x2318;</button>
     <button id="pushBtn" disabled title="Commit &amp; Push to GitHub">&#x2191;</button>
     <button id="promptBtn" class="btn" style="display:none;border-color:#ffffff;color:#ffffff;" title="Copy super-prompt">&#x2605;</button>
@@ -886,7 +805,7 @@ html body.compact-layout #controlBar select:focus{outline:0 !important;box-shado
   var clipHistoryArray = [];
   var isInternalCopy = false;
   var isCodeMode = false;
-  var pendingOldCode = null;  // State memory for the Old Patch / New Patch two-step workflow
+  var pendingOldCode = null;
 
   const $pv       = document.getElementById('preview');
   const $codeView = document.getElementById('codeView');
@@ -897,7 +816,6 @@ html body.compact-layout #controlBar select:focus{outline:0 !important;box-shado
   var sourceContent = '';
   var undoStack     = [];
   var redoStack     = [];
-  var autoMode      = true;
 
   // ── GitHub State (persisted to localStorage + Firebase Realtime DB) ──
   var ghToken       = '';
@@ -1039,7 +957,7 @@ html body.compact-layout #controlBar select:focus{outline:0 !important;box-shado
     try {
       if (!silent) toast('🔄 Syncing from GitHub…', 3000);
       document.getElementById('statusLeft').textContent = `🔄 Syncing ${repoName}…`;
-   const rawHdr = { Authorization: `token ${ghToken}`, Accept: 'application/vnd.github.raw+json' };
+      const rawHdr = { Authorization: `token ${ghToken}`, Accept: 'application/vnd.github.raw+json' };
       let res = await fetch(url, { headers: rawHdr });
       if (res.status === 404) {
         const info = await fetch(`https://api.github.com/repos/${repoName}`, { headers: { Authorization: `token ${ghToken}`, Accept: 'application/vnd.github.v3+json' } });
@@ -1061,11 +979,11 @@ html body.compact-layout #controlBar select:focus{outline:0 !important;box-shado
       try {
         const meta = JSON.parse(sourceContent);
         if (meta && meta.encoding === 'base64' && typeof meta.content === 'string' && meta.sha) {
-  const b64bin = atob(meta.content.replace(/\s/g, ''));
-  const b64bytes = new Uint8Array(b64bin.length);
-  for (let i = 0; i < b64bin.length; i++) b64bytes[i] = b64bin.charCodeAt(i);
-  sourceContent = new TextDecoder('utf-8').decode(b64bytes);
-} else if (meta && meta.encoding === 'none' && meta.sha && meta.git_url) {
+          const b64bin = atob(meta.content.replace(/\s/g, ''));
+          const b64bytes = new Uint8Array(b64bin.length);
+          for (let i = 0; i < b64bin.length; i++) b64bytes[i] = b64bin.charCodeAt(i);
+          sourceContent = new TextDecoder('utf-8').decode(b64bytes);
+        } else if (meta && meta.encoding === 'none' && meta.sha && meta.git_url) {
           const br = await fetch(meta.git_url, { headers: { Authorization: `token ${ghToken}`, Accept: 'application/vnd.github+json' } });
           if (!br.ok) throw new Error('blob fetch ' + br.status);
           const bd = await br.json();
@@ -1077,10 +995,10 @@ html body.compact-layout #controlBar select:focus{outline:0 !important;box-shado
       } catch (e) { if (e.message && e.message.indexOf('blob fetch') === 0) throw e; }
       render(sourceContent);
       undoStack = []; redoStack = [];
-            document.getElementById('undoBtn').disabled = true;
-            document.getElementById('redoBtn').disabled = true;
-            window._loadedRepo = repoName;
-            document.getElementById('statusLeft').textContent = `✅ Synced: ${repoName}`;
+      document.getElementById('undoBtn').disabled = true;
+      document.getElementById('redoBtn').disabled = true;
+      window._loadedRepo = repoName;
+      document.getElementById('statusLeft').textContent = `✅ Synced: ${repoName}`;
       if (!silent) toast(`✅ Loaded ${path} from ${repoName}`);
     } catch(e) {
       if (!silent) toast('❌ Sync error: ' + e.message);
@@ -1108,7 +1026,7 @@ html body.compact-layout #controlBar select:focus{outline:0 !important;box-shado
       document.getElementById('statusLeft').textContent = `✅ Synced: ${ghCurrentRepo} · ${fetched.length} repos`;
     } catch(e) { document.getElementById('statusLeft').textContent = '❌ Repo fetch error'; }
   }
-// ── Full reconcile: adds repos you created, removes repos you deleted ──
+  // ── Full reconcile: adds repos you created, removes repos you deleted ──
   async function ghSyncRepoList() {
     if (!ghToken || !ghUser) return;
     try {
@@ -1192,7 +1110,7 @@ html body.compact-layout #controlBar select:focus{outline:0 !important;box-shado
     if (!sourceContent) { toast('❌ Nothing to push — load content first'); return; }
     if (!ghToken)       { toast('❌ GitHub token not set — open ⚙ GH settings'); return; }
     if (!ghCurrentRepo) { toast('❌ No repo selected'); return; }
-        if (window._loadedRepo && window._loadedRepo !== ghCurrentRepo) { toast('🚫 Push blocked: the code loaded is from ' + window._loadedRepo + ', not ' + ghCurrentRepo + '. Re-tap the repo first.', 6000); return; }
+    if (window._loadedRepo && window._loadedRepo !== ghCurrentRepo) { toast('🚫 Push blocked: the code loaded is from ' + window._loadedRepo + ', not ' + ghCurrentRepo + '. Re-tap the repo first.', 6000); return; }
     const ts = new Date().toISOString().replace('T',' ').slice(0,19);
     document.getElementById('commitMsgInput').value = `Update ${ghFilePath || 'index.html'} via AI Compile — ${ts}`;
     document.getElementById('commitModal').classList.add('open');
@@ -1205,47 +1123,48 @@ html body.compact-layout #controlBar select:focus{outline:0 !important;box-shado
     await ghPushFile(msg);
   });
   async function ghGetFileSHA(repoName, path, branch) {
-      const clean = String(path).replace(/^\/+/, '').split('/').map(encodeURIComponent).join('/');
-      const url = `https://api.github.com/repos/${repoName}/contents/${clean}?ref=${encodeURIComponent(branch)}&t=${Date.now()}`;
-      try {
-        const res = await fetch(url, { cache: 'no-store', headers: { Authorization: `token ${ghToken}`, Accept: 'application/vnd.github.v3+json' } });
-        if (res.status === 404) return null;
-        const data = await res.json();
-        if (Array.isArray(data)) {
-          const hit = data.find(function (f) { return f.path === decodeURIComponent(clean); });
-          return hit ? hit.sha : null;
-        }
-        return data.sha || null;
-      } catch(e) { return null; }
-    }
+    const clean = String(path).replace(/^\/+/, '').split('/').map(encodeURIComponent).join('/');
+    const url = `https://api.github.com/repos/${repoName}/contents/${clean}?ref=${encodeURIComponent(branch)}&t=${Date.now()}`;
+    try {
+      const res = await fetch(url, { cache: 'no-store', headers: { Authorization: `token ${ghToken}`, Accept: 'application/vnd.github.v3+json' } });
+      if (res.status === 404) return null;
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        const hit = data.find(function (f) { return f.path === decodeURIComponent(clean); });
+        return hit ? hit.sha : null;
+      }
+      return data.sha || null;
+    } catch(e) { return null; }
+  }
   async function ghPushFile(commitMsg) {
     const btn = document.getElementById('pushBtn');
     btn.classList.add('pushing'); btn.disabled = true;
     const branch   = ghBranch   || 'main';
     const filePath = ghFilePath || 'index.html';
-  const repo     = (ghCurrentRepo && ghCurrentRepo.indexOf('/') === -1) ? ((ghUser || '888znq') + '/' + ghCurrentRepo) : ghCurrentRepo;    try {
+    const repo     = (ghCurrentRepo && ghCurrentRepo.indexOf('/') === -1) ? ((ghUser || '888znq') + '/' + ghCurrentRepo) : ghCurrentRepo;
+    try {
       toast('⬆ Pushing to GitHub…', 4000);
       document.getElementById('statusLeft').textContent = `⬆ Pushing to ${repo}…`;
       const encoded = btoa(unescape(encodeURIComponent(sourceContent)));
-            const cleanPath = String(filePath).replace(/^\/+/, '');
-            const doPut = async function () {
-              const sha = await ghGetFileSHA(repo, cleanPath, branch);
-              const body = { message: commitMsg, content: encoded, branch: branch };
-              if (sha) body.sha = sha;
-              return fetch(`https://api.github.com/repos/${repo}/contents/${cleanPath.split('/').map(encodeURIComponent).join('/')}`, {
-                method: 'PUT',
-                headers: { Authorization: `token ${ghToken}`, Accept: 'application/vnd.github.v3+json', 'Content-Type': 'application/json' },
-                body: JSON.stringify(body)
-              });
-            };
-            let res = await doPut();
-            if (!res.ok && res.status !== 401 && res.status !== 403) {
-              const firstErr = await res.clone().json().catch(function () { return {}; });
-              if (/sha/i.test(firstErr.message || '') || res.status === 409 || res.status === 422) {
-                await new Promise(function (r) { setTimeout(r, 600); });
-                res = await doPut();
-              }
-            }
+      const cleanPath = String(filePath).replace(/^\/+/, '');
+      const doPut = async function () {
+        const sha = await ghGetFileSHA(repo, cleanPath, branch);
+        const body = { message: commitMsg, content: encoded, branch: branch };
+        if (sha) body.sha = sha;
+        return fetch(`https://api.github.com/repos/${repo}/contents/${cleanPath.split('/').map(encodeURIComponent).join('/')}`, {
+          method: 'PUT',
+          headers: { Authorization: `token ${ghToken}`, Accept: 'application/vnd.github.v3+json', 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+      };
+      let res = await doPut();
+      if (!res.ok && res.status !== 401 && res.status !== 403) {
+        const firstErr = await res.clone().json().catch(function () { return {}; });
+        if (/sha/i.test(firstErr.message || '') || res.status === 409 || res.status === 422) {
+          await new Promise(function (r) { setTimeout(r, 600); });
+          res = await doPut();
+        }
+      }
       if (res.ok) {
         const data = await res.json();
         document.getElementById('statusLeft').textContent = `✅ Pushed to ${repo}`;
@@ -1401,7 +1320,7 @@ html body.compact-layout #controlBar select:focus{outline:0 !important;box-shado
         ghBuildDropdown();
       }
 
-      // Also pin it as a shortcut so it shows up in the bottom shortcut bar (TNL / FFT / SYS / ★ style)
+      // Also pin it as a shortcut so it shows up in the shortcut bar
       const scLabel = repoData.name;
       const scUrl   = `https://github.com/${fullName}`;
       if (!scShortcuts.find(s => s.label === scLabel && s.url === scUrl)) {
@@ -1536,10 +1455,6 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
     } catch(e) { toast("❌ Copy failed"); }
   });
   document.getElementById('errDismissBtn').addEventListener('click', () => { $errOverlay.style.display = 'none'; });
-  window.addEventListener('message', (e) => { 
-    // Iframe syntax errors silenced so they don't pop up during patching
-    // if (e.data && e.data.__compilerErr) showErr(e.data.__compilerErr); 
-  });
 
   // ── AST Panel ─────────────────────────────────────────────────────────
   const $astPanel   = document.getElementById('astPanel');
@@ -1597,7 +1512,7 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
     });
     return '[INDEX MODE: No code is attached on purpose. The request is the text above. Reply in plain text with ONE line only: the request copied exactly, followed by @partN tags for every part you must see to write the patch (parts marked MATCH contain words from the request). Pick as few parts as possible, but include every part where the edit or its dependencies live. Do not write any patch yet.]\n\n=== PARTS (' + chunks.length + ' total, file has ' + src.split('\n').length + ' lines) ===\n' + lines.join('\n');
   }
-  
+
   function liteSource(src, instr) {
     var L = src.split('\n'), N = L.length;
     if (N < 400) return src;
@@ -1639,14 +1554,14 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
     });
     var rank = chunks.filter(function (ch) { return !forced[ch.n] && scores[ch.n] > 0; })
       .sort(function (a, b) { return scores[b.n] - scores[a.n]; });
-      var used = 0, budget = 60000;
-      Object.keys(forced).forEach(function (k) { used += chunks[k - 1].t.length; });
-      if (Object.keys(forced).length) rank = [];
-      rank = rank.filter(function (ch) {
-        if (used + ch.t.length > budget) return false;
-        used += ch.t.length;
-        return true;
-      }).slice(0, 12);
+    var used = 0, budget = 60000;
+    Object.keys(forced).forEach(function (k) { used += chunks[k - 1].t.length; });
+    if (Object.keys(forced).length) rank = [];
+    rank = rank.filter(function (ch) {
+      if (used + ch.t.length > budget) return false;
+      used += ch.t.length;
+      return true;
+    }).slice(0, 12);
     var sel = Object.keys(forced).map(Number).concat(rank.map(function (ch) { return ch.n; }))
       .sort(function (a, b) { return a - b; });
     var out = ['[LITE MODE: the file has ' + N + ' lines and only the relevant parts are shown below. Reply with OLD===SPLIT===NEW blocks whose OLD text is copied exactly from these parts and is unique in the whole file (include a few surrounding lines). If you need a part that is not shown, reply in plain text with only its name from the list, like @functionName.]'];
@@ -1658,581 +1573,400 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
     var rest = chunks.filter(function (ch) { return sel.indexOf(ch.n) < 0 && ch.names.length; })
       .slice(0, 1500).map(function (ch) { return ch.n + ' L' + ch.s + '-' + ch.e + ': ' + ch.names.slice(0, 5).join(', '); });
     out.push('=== OTHER PARTS (names only) ===\n' + rest.join('\n'));
-        return out.join('\n\n');
+    return out.join('\n\n');
+  }
+
+  // ── Parts Map: file shown as clickable @part headers; click = add/remove tag in the prompt box ──
+  (function initPartsMap() {
+    var tagsBtn = document.getElementById('tagsBtn');
+    var $ins = document.getElementById('aiInstruction');
+    if (!tagsBtn || !tagsBtn.parentNode || !$ins) return;
+
+    var btn = document.createElement('button');
+    btn.id = 'partsMapBtn';
+    btn.className = 'btn';
+    btn.style.cssText = 'border-color:#ffffff;color:#ffffff;';
+    btn.title = 'Parts map: click any @part to add/remove it in the prompt box';
+    btn.textContent = '🧩';
+    tagsBtn.parentNode.insertBefore(btn, tagsBtn.nextSibling);
+
+    var ov = null, scroller = null, searchEl = null, countEl = null;
+    var chunks = [], heads = [], isOpen = false, lastSrc = null, watch = null;
+
+    function mk(tag, css, txt) {
+      var e = document.createElement(tag);
+      if (css) e.style.cssText = css;
+      if (txt !== undefined) e.textContent = txt;
+      return e;
+    }
+
+    function tagRe(n) { return new RegExp('(^|\\s)@part' + n + '(?=\\s|$)'); }
+    function isOn(n) { return tagRe(n).test($ins.value); }
+
+    function toggleTag(n) {
+      var v = $ins.value;
+      var re = tagRe(n);
+      if (re.test(v)) {
+        v = v.replace(re, '');
+      } else {
+        v = v + ((v && !/\s$/.test(v)) ? ' ' : '') + '@part' + n;
       }
-    
-      // ── Parts Map: file shown as clickable @part headers; click = add/remove tag in the prompt box ──
-      (function initPartsMap() {
-        var tagsBtn = document.getElementById('tagsBtn');
-        var oldBtn = document.getElementById('partsBtn');
-        var $ins = document.getElementById('aiInstruction');
-        if (!tagsBtn || !tagsBtn.parentNode || !$ins) return;
-        if (oldBtn) oldBtn.style.display = 'none';
-    
-        var btn = document.createElement('button');
-        btn.id = 'partsMapBtn';
-        btn.className = 'btn';
-        btn.style.cssText = 'border-color:#ffffff;color:#ffffff;';
-        btn.title = 'Parts map: click any @part to add/remove it in the prompt box';
-        btn.textContent = '🧩';
-        tagsBtn.parentNode.insertBefore(btn, tagsBtn.nextSibling);
-    
-        var ov = null, scroller = null, searchEl = null, countEl = null;
-        var chunks = [], heads = [], isOpen = false, lastSrc = null, watch = null;
-    
-        function mk(tag, css, txt) {
-          var e = document.createElement(tag);
-          if (css) e.style.cssText = css;
-          if (txt !== undefined) e.textContent = txt;
-          return e;
-        }
-    
-        function tagRe(n) { return new RegExp('(^|\\s)@part' + n + '(?=\\s|$)'); }
-        function isOn(n) { return tagRe(n).test($ins.value); }
-    
-        function toggleTag(n) {
-          var v = $ins.value;
-          var re = tagRe(n);
-          if (re.test(v)) {
-            v = v.replace(re, '');
+      $ins.value = v;
+      $ins.dispatchEvent(new Event('input', { bubbles: true }));
+      paint();
+    }
+
+    function dedent(text) {
+      var lines = text.split('\n'), min = 1e9, i, k;
+      for (i = 0; i < lines.length; i++) {
+        if (!lines[i].trim()) continue;
+        k = lines[i].match(/^[ \t]*/)[0].length;
+        if (k < min) min = k;
+      }
+      if (min === 1e9 || min === 0) return text;
+      return lines.map(function (x) { return x.slice(Math.min(min, x.length - x.replace(/^[ \t]+/, '').length)); }).join('\n');
+    }
+
+    function previewOf(ch) {
+      var ls = ch.t.split('\n').filter(function (x) { return x.trim(); }).slice(0, 5);
+      var txt = dedent(ls.join('\n')).split('\n').map(function (x) { return x.length > 140 ? x.slice(0, 140) + '…' : x; }).join('\n');
+      return txt + '\n…';
+    }
+
+    function paint() {
+      var on = 0;
+      heads.forEach(function (h) {
+        var s = isOn(h.n);
+        if (s) on++;
+        h.el.style.background = s ? '#FFD700' : '#E2E8F0';
+        h.el.style.color = '#000432';
+      });
+      if (countEl) countEl.textContent = on + ' tagged';
+    }
+
+    function renderList() {
+      var q = (searchEl.value || '').toLowerCase().trim().replace(/^@/, '');
+      scroller.textContent = '';
+      heads = [];
+      var shown = 0;
+      chunks.forEach(function (ch) {
+        var label = ch.names.slice(0, 8).join(', ');
+        if (q && ('part' + ch.n).indexOf(q) < 0 && label.toLowerCase().indexOf(q) < 0 && ch.low.indexOf(q) < 0) return;
+        shown++;
+        var sec = mk('div', 'margin:0 0 10px;');
+        var hd = mk('div', 'position:sticky;top:0;z-index:2;cursor:pointer;padding:8px 14px;font-weight:800;font-size:12px;border-radius:999px;margin:0 6px 4px;word-break:break-word;', '@part' + ch.n + '   ·   L' + ch.s + '-' + ch.e + (label ? '   ·   ' + label : ''));
+        hd.addEventListener('click', function () { toggleTag(ch.n); });
+        var pre = mk('pre', 'margin:0 10px;padding:6px 10px;background:rgba(255,255,255,0.08);color:#fff;border-radius:10px;font-size:11px;white-space:pre;overflow-x:auto;cursor:zoom-in;user-select:text;-webkit-user-select:text;', previewOf(ch));
+        var expanded = false;
+        pre.addEventListener('click', function () {
+          expanded = !expanded;
+          if (expanded) {
+            pre.textContent = dedent(ch.t);
+            pre.style.maxHeight = '60vh';
+            pre.style.overflow = 'auto';
+            pre.style.cursor = 'zoom-out';
           } else {
-            v = v + ((v && !/\s$/.test(v)) ? ' ' : '') + '@part' + n;
+            pre.textContent = previewOf(ch);
+            pre.style.maxHeight = '';
+            pre.style.overflow = '';
+            pre.style.overflowX = 'auto';
+            pre.style.cursor = 'zoom-in';
           }
-          $ins.value = v;
-          $ins.dispatchEvent(new Event('input', { bubbles: true }));
-          paint();
+        });
+        sec.appendChild(hd);
+        sec.appendChild(pre);
+        scroller.appendChild(sec);
+        heads.push({ n: ch.n, el: hd });
+      });
+      if (!shown) scroller.appendChild(mk('div', 'padding:20px;text-align:center;color:#fff;', 'No part matches.'));
+      paint();
+    }
+
+    var pmUi = true, pmLayer = null, pmHead = null, pmHint = null, pmModeBtn = null, pmChips = [], pmSig = '';
+    var pmCssCache = {}, pmInfoCache = {};
+
+    function pmEsc(s) { return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+
+    function pmFirstWith(strs) {
+      var a, b;
+      for (a = 0; a < chunks.length; a++) {
+        for (b = 0; b < strs.length; b++) {
+          if (chunks[a].t.indexOf(strs[b]) >= 0) return chunks[a].n;
         }
-    
-        function dedent(text) {
-          var lines = text.split('\n'), min = 1e9, i, k;
-          for (i = 0; i < lines.length; i++) {
-            if (!lines[i].trim()) continue;
-            k = lines[i].match(/^[ \t]*/)[0].length;
-            if (k < min) min = k;
-          }
-          if (min === 1e9 || min === 0) return text;
-          return lines.map(function (x) { return x.slice(Math.min(min, x.length - x.replace(/^[ \t]+/, '').length)); }).join('\n');
-        }
-    
-        function labelOf(ch) {
-          var label = ch.names.slice(0, 8).join(', ');
-          if (!label) {
-            var first = ch.t.split('\n').map(function (x) { return x.trim(); }).filter(Boolean)[0] || '';
-            label = '(' + first.slice(0, 60) + ')';
-          }
-          return label;
-        }
-    
-        function previewOf(ch) {
-          var ls = ch.t.split('\n').filter(function (x) { return x.trim(); }).slice(0, 5);
-          var txt = dedent(ls.join('\n')).split('\n').map(function (x) { return x.length > 140 ? x.slice(0, 140) + '…' : x; }).join('\n');
-          return txt + '\n…';
-        }
-    
-        function paint() {
-          var on = 0;
-          heads.forEach(function (h) {
-            var s = isOn(h.n);
-            if (s) on++;
-            h.el.style.background = s ? '#FFD700' : '#E2E8F0';
-            h.el.style.color = '#000432';
-          });
-          if (countEl) countEl.textContent = on + ' tagged';
-        }
-    
-        function renderList() {
-          var q = (searchEl.value || '').toLowerCase().trim().replace(/^@/, '');
-          scroller.textContent = '';
-          heads = [];
-          var shown = 0;
+      }
+      return 0;
+    }
+
+    function pmMarkup(el) {
+      var n = 0, best = null, tx = '', cls;
+      if (el.id) n = pmFirstWith(['id="' + el.id + '"', "id='" + el.id + "'"]);
+      if (!n) {
+        ['data-val', 'aria-label', 'data-id', 'name'].forEach(function (at) {
+          var v = el.getAttribute(at);
+          if (!n && v) n = pmFirstWith([at + '="' + v + '"']);
+        });
+      }
+      if (!n) {
+        cls = (typeof el.className === 'string' ? el.className : '').split(/\s+/).filter(Boolean);
+        cls.forEach(function (c) {
+          var re = new RegExp('class\\s*=\\s*["\'](?:[^"\']*\\s)?' + pmEsc(c) + '(?![\\w-])');
+          var ms = chunks.filter(function (ch) { return re.test(ch.t); });
+          if (ms.length && (!best || ms.length < best.length)) best = ms;
+        });
+        if (best) n = best[0].n;
+      }
+      if (!n && el.childNodes && el.childNodes.length) {
+        tx = (el.childNodes[0].nodeType === 3 ? el.childNodes[0].nodeValue : '').trim();
+        if (tx.length >= 2) n = pmFirstWith(['>' + tx]);
+      }
+      return n;
+    }
+
+    function pmCss(el, skipN) {
+      var out = [], toks = [];
+      var cls = (typeof el.className === 'string' ? el.className : '').split(/\s+/).filter(function (c) {
+        return c && !/^(active|on|off|show|hidden|selected|open|disabled)$/.test(c);
+      }).slice(0, 4);
+      if (el.id) toks.push('#' + el.id);
+      cls.forEach(function (c) { toks.push('.' + c); });
+      toks.forEach(function (tk) {
+        var hit = pmCssCache[tk];
+        if (!hit) {
+          hit = [];
+          var re = new RegExp(pmEsc(tk) + '(?![\\w-])[^{};]*\\{');
           chunks.forEach(function (ch) {
-            var label = ch.names.slice(0, 8).join(', ');
-                        if (q && ('part' + ch.n).indexOf(q) < 0 && label.toLowerCase().indexOf(q) < 0 && ch.low.indexOf(q) < 0) return;
-                        shown++;
-                        var sec = mk('div', 'margin:0 0 10px;');
-                        var hd = mk('div', 'position:sticky;top:0;z-index:2;cursor:pointer;padding:8px 14px;font-weight:800;font-size:12px;border-radius:999px;margin:0 6px 4px;word-break:break-word;', '@part' + ch.n + '   ·   L' + ch.s + '-' + ch.e + (label ? '   ·   ' + label : ''));
-            hd.addEventListener('click', function () { toggleTag(ch.n); });
-            var pre = mk('pre', 'margin:0 10px;padding:6px 10px;background:rgba(255,255,255,0.08);color:#fff;border-radius:10px;font-size:11px;white-space:pre;overflow-x:auto;cursor:zoom-in;user-select:text;-webkit-user-select:text;', previewOf(ch));
-            var expanded = false;
-            pre.addEventListener('click', function () {
-              expanded = !expanded;
-              if (expanded) {
-                pre.textContent = dedent(ch.t);
-                pre.style.maxHeight = '60vh';
-                pre.style.overflow = 'auto';
-                pre.style.cursor = 'zoom-out';
-              } else {
-                pre.textContent = previewOf(ch);
-                pre.style.maxHeight = '';
-                pre.style.overflow = '';
-                pre.style.overflowX = 'auto';
-                pre.style.cursor = 'zoom-in';
-              }
-            });
-            sec.appendChild(hd);
-            sec.appendChild(pre);
-            scroller.appendChild(sec);
-            heads.push({ n: ch.n, el: hd });
+            if (ch.t.indexOf(tk) < 0) return;
+            if (ch.pmCss === undefined) ch.pmCss = !/\bfunction\s*[\w(]|\b(var|const|let)\s+[\w$]+\s*[=;,]|=>/.test(ch.t);
+            if (ch.pmCss && re.test(ch.t)) hit.push(ch.n);
           });
-          if (!shown) scroller.appendChild(mk('div', 'padding:20px;text-align:center;color:#fff;', 'No part matches.'));
-          paint();
+          pmCssCache[tk] = hit;
         }
-    
-        var pmUi = true, pmLayer = null, pmHead = null, pmHint = null, pmModeBtn = null, pmChips = [], pmSig = '';
-                var pmCssCache = {}, pmInfoCache = {};
-        
-                function pmEsc(s) { return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
-        
-                function pmFirstWith(strs) {
-                  var a, b;
-                  for (a = 0; a < chunks.length; a++) {
-                    for (b = 0; b < strs.length; b++) {
-                      if (chunks[a].t.indexOf(strs[b]) >= 0) return chunks[a].n;
-                    }
-                  }
-                  return 0;
-                }
-        
-                function pmMarkup(el) {
-                  var n = 0, best = null, tx = '', cls;
-                  if (el.id) n = pmFirstWith(['id="' + el.id + '"', "id='" + el.id + "'"]);
-                  if (!n) {
-                    ['data-val', 'aria-label', 'data-id', 'name'].forEach(function (at) {
-                      var v = el.getAttribute(at);
-                      if (!n && v) n = pmFirstWith([at + '="' + v + '"']);
-                    });
-                  }
-                  if (!n) {
-                    cls = (typeof el.className === 'string' ? el.className : '').split(/\s+/).filter(Boolean);
-                    cls.forEach(function (c) {
-                      var re = new RegExp('class\\s*=\\s*["\'](?:[^"\']*\\s)?' + pmEsc(c) + '(?![\\w-])');
-                      var ms = chunks.filter(function (ch) { return re.test(ch.t); });
-                      if (ms.length && (!best || ms.length < best.length)) best = ms;
-                    });
-                    if (best) n = best[0].n;
-                  }
-                  if (!n && el.childNodes && el.childNodes.length) {
-                    tx = (el.childNodes[0].nodeType === 3 ? el.childNodes[0].nodeValue : '').trim();
-                    if (tx.length >= 2) n = pmFirstWith(['>' + tx]);
-                  }
-                  return n;
-                }
-        
-                function pmCss(el, skipN) {
-                  var out = [], toks = [];
-                  var cls = (typeof el.className === 'string' ? el.className : '').split(/\s+/).filter(function (c) {
-                    return c && !/^(active|on|off|show|hidden|selected|open|disabled)$/.test(c);
-                  }).slice(0, 4);
-                  if (el.id) toks.push('#' + el.id);
-                  cls.forEach(function (c) { toks.push('.' + c); });
-                  toks.forEach(function (tk) {
-                    var hit = pmCssCache[tk];
-                    if (!hit) {
-                      hit = [];
-                      var re = new RegExp(pmEsc(tk) + '(?![\\w-])[^{};]*\\{');
-                      chunks.forEach(function (ch) {
-                        if (ch.t.indexOf(tk) < 0) return;
-                        if (ch.pmCss === undefined) ch.pmCss = !/\bfunction\s*[\w(]|\b(var|const|let)\s+[\w$]+\s*[=;,]|=>/.test(ch.t);
-                        if (ch.pmCss && re.test(ch.t)) hit.push(ch.n);
-                      });
-                      pmCssCache[tk] = hit;
-                    }
-                    hit.forEach(function (n) { if (n !== skipN && out.indexOf(n) < 0) out.push(n); });
-                  });
-                  return out.slice(0, 2);
-                }
-        
-                function pmInfo(el) {
-                  var first = (el.childNodes[0] && el.childNodes[0].nodeType === 3) ? el.childNodes[0].nodeValue.trim() : '';
-                  var key = el.tagName + '|' + el.id + '|' + (typeof el.className === 'string' ? el.className : '') + '|' + (el.getAttribute('data-val') || '') + '|' + (el.getAttribute('aria-label') || '') + '|' + first;
-                  if (pmInfoCache[key] !== undefined) return pmInfoCache[key];
-                  var mu = pmMarkup(el), parts = [], info = null;
-                  if (mu) parts.push({ n: mu, css: false });
-                  pmCss(el, mu).forEach(function (n) { parts.push({ n: n, css: true }); });
-                  if (parts.length) {
-                    info = { key: parts.map(function (p) { return p.n; }).join(','), parts: parts };
-                  }
-                  pmInfoCache[key] = info;
-                  return info;
-                }
-        
-                function pmPaint() {
-                  pmChips.forEach(function (c) {
-                    c.el.style.background = isOn(c.n) ? '#FFD700' : (c.css ? '#9BE7FF' : '#E2E8F0');
-                  });
-                }
-        
-                function pmLayout() {
-                  if (!pmLayer || !isOpen || !pmUi) return;
-                  var ifr = document.getElementById('preview'), doc = null;
-                  try { doc = ifr ? ifr.contentDocument : null; } catch (e) { doc = null; }
-                  if (!doc || !doc.body) return;
-                  var win = doc.defaultView, fr = ifr.getBoundingClientRect();
-                  var lim = ov.getBoundingClientRect().bottom;
-                  var topMin = pmHead.getBoundingClientRect().bottom + 2;
-                  var vw = window.innerWidth;
-                  var tagOk = /^(BUTTON|INPUT|SELECT|TEXTAREA|A|CANVAS|LABEL)$/;
-                  var list = doc.body.querySelectorAll('*'), groups = [], a, b, el, r, cs, info, g, x, y;
-                  for (a = 0; a < list.length && a < 4000; a++) {
-                    el = list[a];
-                    if (!(el.id || tagOk.test(el.tagName))) continue;
-                    if (el.closest && el.closest('svg')) continue;
-                    r = el.getBoundingClientRect();
-                    if (r.width < 6 || r.height < 6) continue;
-                    cs = win.getComputedStyle(el);
-                    if (cs.visibility === 'hidden' || cs.display === 'none') continue;
-                    x = fr.left + r.left;
-                    y = fr.top + r.top;
-                    if (x >= vw || y >= lim - 6 || x + r.width <= 0 || y + r.height <= topMin) continue;
-                    info = pmInfo(el);
-                    if (!info) continue;
-                    g = null;
-                    for (b = 0; b < groups.length; b++) {
-                      if (groups[b].par === el.parentElement && groups[b].key === info.key) { g = groups[b]; break; }
-                    }
-                    if (!g) {
-                      g = { par: el.parentElement, key: info.key, parts: info.parts, x1: x, y1: y, x2: x + r.width, y2: y + r.height, names: [] };
-                      groups.push(g);
-                    } else {
-                      g.x1 = Math.min(g.x1, x);
-                      g.y1 = Math.min(g.y1, y);
-                      g.x2 = Math.max(g.x2, x + r.width);
-                      g.y2 = Math.max(g.y2, y + r.height);
-                    }
-                    if (g.names.length < 6) g.names.push(el.id ? '#' + el.id : el.tagName.toLowerCase());
-                  }
-                  var sig = groups.map(function (q) {
-                    return q.key + ':' + Math.round(q.x1) + ',' + Math.round(q.y1) + ',' + Math.round(q.x2) + ',' + Math.round(q.y2);
-                  }).join('|');
-                  if (sig === pmSig) return;
-                  pmSig = sig;
-                  pmLayer.textContent = '';
-                  pmChips = [];
-                  var placed = [];
-                  groups.forEach(function (q) {
-                    var box = mk('div', 'position:absolute;pointer-events:none;box-sizing:border-box;border:1px dashed rgba(255,215,0,0.6);border-radius:6px;left:' + q.x1 + 'px;top:' + q.y1 + 'px;width:' + (q.x2 - q.x1) + 'px;height:' + (q.y2 - q.y1) + 'px;');
-                    pmLayer.appendChild(box);
-                    var cw = q.parts.length * 50, chH = 15, cx = Math.max(2, Math.min(q.x1, vw - cw - 2)), cy = Math.max(topMin, q.y1 - 7), t, hit;
-                    for (t = 0; t < 10; t++) {
-                      hit = placed.some(function (p) { return cx < p.x + p.w && cx + cw > p.x && cy < p.y + p.h && cy + chH > p.y; });
-                      if (!hit) break;
-                      cy += chH + 1;
-                    }
-                    if (cy > lim - chH) cy = lim - chH;
-                    placed.push({ x: cx, y: cy, w: cw, h: chH });
-                    var row = mk('div', 'position:absolute;display:flex;gap:2px;pointer-events:auto;z-index:2;left:' + cx + 'px;top:' + cy + 'px;');
-                    q.parts.forEach(function (p) {
-                      var c = mk('span', 'cursor:pointer;font-size:9px;font-weight:800;line-height:13px;padding:0 5px;border-radius:999px;color:#000432;box-shadow:0 0 0 1px #000432;white-space:nowrap;user-select:none;-webkit-user-select:none;', '@part' + p.n);
-                      c.title = (p.css ? 'styles' : 'markup') + ' - tap to add/remove @part' + p.n;
-c.addEventListener('click', function (ev) { ev.stopPropagation(); toggleTag(p.n); });
-row.appendChild(c);
-pmChips.push({ el: c, n: p.n, css: p.css });
-});
-pmLayer.appendChild(row);
-});
-pmPaint();
-}
+        hit.forEach(function (n) { if (n !== skipN && out.indexOf(n) < 0) out.push(n); });
+      });
+      return out.slice(0, 2);
+    }
 
-function loadChunks() {
-window._liteChunks = null;
-liteSource(sourceContent, '');
-chunks = window._liteChunks || [];
-lastSrc = sourceContent;
-pmCssCache = {};
-pmInfoCache = {};
-pmSig = '';
-}
+    function pmInfo(el) {
+      var first = (el.childNodes[0] && el.childNodes[0].nodeType === 3) ? el.childNodes[0].nodeValue.trim() : '';
+      var key = el.tagName + '|' + el.id + '|' + (typeof el.className === 'string' ? el.className : '') + '|' + (el.getAttribute('data-val') || '') + '|' + (el.getAttribute('aria-label') || '') + '|' + first;
+      if (pmInfoCache[key] !== undefined) return pmInfoCache[key];
+      var mu = pmMarkup(el), parts = [], info = null;
+      if (mu) parts.push({ n: mu, css: false });
+      pmCss(el, mu).forEach(function (n) { parts.push({ n: n, css: true }); });
+      if (parts.length) {
+        info = { key: parts.map(function (p) { return p.n; }).join(','), parts: parts };
+      }
+      pmInfoCache[key] = info;
+      return info;
+    }
 
-var pmTimer = null;
+    function pmPaint() {
+      pmChips.forEach(function (c) {
+        c.el.style.background = isOn(c.n) ? '#FFD700' : (c.css ? '#9BE7FF' : '#E2E8F0');
+      });
+    }
 
-function pmSetMode(on) {
-pmUi = !!on;
-if (!ov || !pmLayer) return;
-ov.style.background = pmUi ? 'transparent' : '#000432';
-pmHead.style.background = '#000432';
-scroller.style.display = pmUi ? 'none' : 'block';
-pmHint.style.display = pmUi ? 'none' : 'block';
-pmLayer.style.display = pmUi ? 'block' : 'none';
-pmModeBtn.textContent = pmUi ? '☰' : '🖼';
-pmModeBtn.title = pmUi ? 'Switch to list view' : 'Switch to on-screen view';
-pmSig = '';
-if (pmUi) pmLayout();
-}
+    function pmLayout() {
+      if (!pmLayer || !isOpen || !pmUi) return;
+      var ifr = document.getElementById('preview'), doc = null;
+      try { doc = ifr ? ifr.contentDocument : null; } catch (e) { doc = null; }
+      if (!doc || !doc.body) return;
+      var win = doc.defaultView, fr = ifr.getBoundingClientRect();
+      var lim = ov.getBoundingClientRect().bottom;
+      var topMin = pmHead.getBoundingClientRect().bottom + 2;
+      var vw = window.innerWidth;
+      var tagOk = /^(BUTTON|INPUT|SELECT|TEXTAREA|A|CANVAS|LABEL)$/;
+      var list = doc.body.querySelectorAll('*'), groups = [], a, b, el, r, cs, info, g, x, y;
+      for (a = 0; a < list.length && a < 4000; a++) {
+        el = list[a];
+        if (!(el.id || tagOk.test(el.tagName))) continue;
+        if (el.closest && el.closest('svg')) continue;
+        r = el.getBoundingClientRect();
+        if (r.width < 6 || r.height < 6) continue;
+        cs = win.getComputedStyle(el);
+        if (cs.visibility === 'hidden' || cs.display === 'none') continue;
+        x = fr.left + r.left;
+        y = fr.top + r.top;
+        if (x >= vw || y >= lim - 6 || x + r.width <= 0 || y + r.height <= topMin) continue;
+        info = pmInfo(el);
+        if (!info) continue;
+        g = null;
+        for (b = 0; b < groups.length; b++) {
+          if (groups[b].par === el.parentElement && groups[b].key === info.key) { g = groups[b]; break; }
+        }
+        if (!g) {
+          g = { par: el.parentElement, key: info.key, parts: info.parts, x1: x, y1: y, x2: x + r.width, y2: y + r.height, names: [] };
+          groups.push(g);
+        } else {
+          g.x1 = Math.min(g.x1, x);
+          g.y1 = Math.min(g.y1, y);
+          g.x2 = Math.max(g.x2, x + r.width);
+          g.y2 = Math.max(g.y2, y + r.height);
+        }
+        if (g.names.length < 6) g.names.push(el.id ? '#' + el.id : el.tagName.toLowerCase());
+      }
+      var sig = groups.map(function (q) {
+        return q.key + ':' + Math.round(q.x1) + ',' + Math.round(q.y1) + ',' + Math.round(q.x2) + ',' + Math.round(q.y2);
+      }).join('|');
+      if (sig === pmSig) return;
+      pmSig = sig;
+      pmLayer.textContent = '';
+      pmChips = [];
+      var placed = [];
+      groups.forEach(function (q) {
+        var box = mk('div', 'position:absolute;pointer-events:none;box-sizing:border-box;border:1px dashed rgba(255,215,0,0.6);border-radius:6px;left:' + q.x1 + 'px;top:' + q.y1 + 'px;width:' + (q.x2 - q.x1) + 'px;height:' + (q.y2 - q.y1) + 'px;');
+        pmLayer.appendChild(box);
+        var cw = q.parts.length * 50, chH = 15, cx = Math.max(2, Math.min(q.x1, vw - cw - 2)), cy = Math.max(topMin, q.y1 - 7), t, hit;
+        for (t = 0; t < 10; t++) {
+          hit = placed.some(function (p) { return cx < p.x + p.w && cx + cw > p.x && cy < p.y + p.h && cy + chH > p.y; });
+          if (!hit) break;
+          cy += chH + 1;
+        }
+        if (cy > lim - chH) cy = lim - chH;
+        placed.push({ x: cx, y: cy, w: cw, h: chH });
+        var row = mk('div', 'position:absolute;display:flex;gap:2px;pointer-events:auto;z-index:2;left:' + cx + 'px;top:' + cy + 'px;');
+        q.parts.forEach(function (p) {
+          var c = mk('span', 'cursor:pointer;font-size:9px;font-weight:800;line-height:13px;padding:0 5px;border-radius:999px;color:#000432;box-shadow:0 0 0 1px #000432;white-space:nowrap;user-select:none;-webkit-user-select:none;', '@part' + p.n);
+          c.title = (p.css ? 'styles' : 'markup') + ' - tap to add/remove @part' + p.n;
+          c.addEventListener('click', function (ev) { ev.stopPropagation(); toggleTag(p.n); });
+          row.appendChild(c);
+          pmChips.push({ el: c, n: p.n, css: p.css });
+        });
+        pmLayer.appendChild(row);
+      });
+      pmPaint();
+    }
 
-function pmEnsure() {
-if (!ov) build();
-if (pmLayer) return;
-pmHead = ov.childNodes[0];
-pmHint = ov.childNodes[1];
-pmLayer = mk('div', 'position:absolute;left:0;top:0;right:0;bottom:0;pointer-events:none;overflow:hidden;display:none;');
-ov.appendChild(pmLayer);
-pmModeBtn = mk('button', 'background:#000432;color:#fff;border:1px solid #fff;border-radius:999px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;', '☰');
-pmModeBtn.addEventListener('click', function () { pmSetMode(!pmUi); });
-pmHead.insertBefore(pmModeBtn, countEl);
-}
+    function loadChunks() {
+      window._liteChunks = null;
+      liteSource(sourceContent, '');
+      chunks = window._liteChunks || [];
+      lastSrc = sourceContent;
+      pmCssCache = {};
+      pmInfoCache = {};
+      pmSig = '';
+    }
 
-var _paint0 = paint;
-paint = function () { _paint0(); pmPaint(); };
+    var pmTimer = null;
 
-var _openMap0 = openMap;
-var _closeMap0 = closeMap;
-openMap = function () {
-_openMap0();
-if (!isOpen) return;
-pmEnsure();
-pmSetMode(pmUi);
-clearInterval(pmTimer);
-pmTimer = setInterval(pmLayout, 500);
-};
-closeMap = function () {
-clearInterval(pmTimer);
-_closeMap0();
-if (pmLayer) pmLayer.textContent = '';
-pmSig = '';
-};
-    
-        function fitBottom() {
-          if (!ov) return;
-          var top = window.innerHeight;
-          ['controlBar', 'shortcutBar', 'statusBar'].forEach(function (id) {
-            var e = document.getElementById(id);
-            if (!e) return;
-            var r = e.getBoundingClientRect();
-            if (r.height > 0 && r.top > window.innerHeight / 2) top = Math.min(top, r.top);
-          });
-          ov.style.bottom = (window.innerHeight - top) + 'px';
-        }
-    
-        function build() {
-          ov = mk('div', 'position:fixed;left:0;right:0;top:0;bottom:0;z-index:90;background:#000432;display:none;flex-direction:column;font-family:monospace;color:#fff;');
-          var head = mk('div', 'display:flex;gap:6px;align-items:center;padding:8px;border-bottom:1px solid #fff;flex-wrap:wrap;');
-          head.appendChild(mk('b', 'font-size:13px;', '🧩 PARTS MAP'));
-          searchEl = mk('input', 'flex:1 1 140px;min-width:0;background:#E2E8F0;color:#000432;border:none;border-radius:999px;padding:5px 12px;font-size:12px;');
-          searchEl.placeholder = 'search name / code / part number...';
-          searchEl.addEventListener('input', renderList);
-          countEl = mk('span', 'font-size:11px;', '0 tagged');
-          var bClr = mk('button', 'background:#000432;color:#fff;border:1px solid #fff;border-radius:999px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;', 'CLEAR');
-          bClr.addEventListener('click', function () {
-            $ins.value = $ins.value.replace(/(^|\s)@part\d+(?=\s|$)/g, '').replace(/^\s+/, '');
-            $ins.dispatchEvent(new Event('input', { bubbles: true }));
-            paint();
-          });
-          var bClose = mk('button', 'background:#000432;color:#fff;border:1px solid #fff;border-radius:999px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;', '✕');
-          bClose.addEventListener('click', closeMap);
-          head.appendChild(searchEl);
-          head.appendChild(countEl);
-          head.appendChild(bClr);
-          head.appendChild(bClose);
-          var hint = mk('div', 'padding:4px 10px;font-size:10px;opacity:0.8;', 'Tap a yellow/white header = add or remove its @part tag in the prompt box. Tap the code below it = expand / collapse.');
-          scroller = mk('div', 'flex:1 1 auto;overflow:auto;padding:6px 0;');
-          ov.appendChild(head);
-          ov.appendChild(hint);
-          ov.appendChild(scroller);
-          document.body.appendChild(ov);
-          $ins.addEventListener('input', function () { if (isOpen) paint(); });
-          window.addEventListener('resize', fitBottom);
-          document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && isOpen) closeMap(); });
-        }
-    
-        function openMap() {
-          if (!sourceContent) { toast('⚠️ Load a file first'); return; }
-          loadChunks();
-          if (!chunks.length) { toast('ℹ️ File is under 400 lines, it is sent whole (no parts)', 4000); return; }
-          if (!ov) build();
-          searchEl.value = '';
-          renderList();
-          fitBottom();
-          ov.style.display = 'flex';
-          isOpen = true;
-          btn.style.background = '#FFD700';
-          btn.style.color = '#000432';
-          watch = setInterval(function () {
-            if (isOpen && sourceContent !== lastSrc) { loadChunks(); renderList(); }
-            fitBottom();
-          }, 1500);
-        }
-    
-        function closeMap() {
-          if (ov) ov.style.display = 'none';
-          isOpen = false;
-          clearInterval(watch);
-          btn.style.background = '';
-          btn.style.color = '#ffffff';
-        }
-    
-        btn.addEventListener('click', function () { if (isOpen) closeMap(); else openMap(); });
-      })();
-    
-      // ── Parts Browser: view / search / copy every @part ───────────────────
-      (function initPartsBrowser() {
-        var btn = document.getElementById('partsBtn');
-        if (!btn) return;
-        var ov = null, listEl = null, searchEl = null, countEl = null;
-        var chunks = [], picked = {}, shownList = [];
-        var BTN = 'background:#000432;color:#fff;border:1px solid #fff;border-radius:999px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;';
-    
-        function mk(tag, css, txt) {
-          var e = document.createElement(tag);
-          if (css) e.style.cssText = css;
-          if (txt !== undefined) e.textContent = txt;
-          return e;
-        }
-    
-        function copyText(t, msg) {
-          var done = function () { toast(msg || '✅ Copied'); };
-          var fb = function () {
-            var ta = document.createElement('textarea');
-            ta.value = t;
-            ta.style.cssText = 'position:fixed;left:-9999px;top:0;';
-            document.body.appendChild(ta);
-            ta.select();
-            try { document.execCommand('copy'); done(); } catch (e) { toast('❌ Copy failed'); }
-            ta.remove();
-          };
-          try { isInternalCopy = true; setTimeout(function () { isInternalCopy = false; }, 1500); } catch (e0) {}
-          if (navigator.clipboard && navigator.clipboard.writeText) {
-            navigator.clipboard.writeText(t).then(done, fb);
-          } else {
-            fb();
-          }
-        }
-    
-        function selected() {
-          return chunks.filter(function (ch) { return picked[ch.n]; });
-        }
-    
-        function updateCount() {
-          if (countEl) countEl.textContent = selected().length + ' selected';
-        }
-    
-        function labelOf(ch) {
-          var label = ch.names.slice(0, 8).join(', ');
-          if (!label) {
-            var first = ch.t.split('\n').map(function (x) { return x.trim(); }).filter(Boolean)[0] || '';
-            label = '(' + first.slice(0, 60) + ')';
-          }
-          return label;
-        }
-    
-        function renderList() {
-          var q = (searchEl.value || '').toLowerCase().trim().replace(/^@/, '');
-          listEl.textContent = '';
-          shownList = [];
-          chunks.forEach(function (ch) {
-            var label = labelOf(ch);
-            if (q && ('part' + ch.n).indexOf(q) < 0 && label.toLowerCase().indexOf(q) < 0 && ch.low.indexOf(q) < 0) return;
-            shownList.push(ch);
-            var row = mk('div', 'border-bottom:1px solid rgba(255,255,255,0.25);padding:6px 8px;');
-            var top = mk('div', 'display:flex;gap:6px;align-items:center;flex-wrap:wrap;');
-            var cb = mk('input');
-            cb.type = 'checkbox';
-            cb.checked = !!picked[ch.n];
-            cb.addEventListener('change', function () {
-              if (cb.checked) picked[ch.n] = 1; else delete picked[ch.n];
-              updateCount();
-            });
-            var info = mk('span', 'flex:1 1 160px;min-width:0;word-break:break-word;', '@part' + ch.n + '  L' + ch.s + '-' + ch.e + '  ·  ' + label);
-            var bTag = mk('button', BTN, 'TAG');
-            bTag.addEventListener('click', function () { copyText('@part' + ch.n, '✅ Copied @part' + ch.n); });
-            var bCode = mk('button', BTN, 'CODE');
-            bCode.addEventListener('click', function () { copyText(ch.t, '✅ Copied code of part ' + ch.n); });
-            var bView = mk('button', BTN, '👁');
-            var pre = null;
-            bView.addEventListener('click', function () {
-              if (pre) { pre.remove(); pre = null; return; }
-              pre = mk('pre', 'margin:6px 0 0;max-height:240px;overflow:auto;background:#E2E8F0;color:#000432;padding:8px;border-radius:8px;white-space:pre;font-size:11px;user-select:text;-webkit-user-select:text;');
-              pre.textContent = ch.t;
-              row.appendChild(pre);
-            });
-            top.appendChild(cb);
-            top.appendChild(info);
-            top.appendChild(bTag);
-            top.appendChild(bCode);
-            top.appendChild(bView);
-            row.appendChild(top);
-            listEl.appendChild(row);
-          });
-          if (!shownList.length) listEl.appendChild(mk('div', 'padding:14px;text-align:center;', 'No part matches.'));
-        }
-    
-        function build() {
-          ov = mk('div', 'position:fixed;inset:0;background:rgba(0,4,50,0.92);z-index:100000;display:none;align-items:center;justify-content:center;');
-          var box = mk('div', 'width:94vw;max-width:760px;height:88vh;background:#000432;border:1px solid #fff;border-radius:14px;display:flex;flex-direction:column;overflow:hidden;color:#fff;font-family:monospace;font-size:12px;');
-          var head = mk('div', 'display:flex;gap:6px;align-items:center;padding:8px;');
-          head.appendChild(mk('b', 'font-size:13px;', '🧩 PARTS'));
-          searchEl = mk('input', 'flex:1 1 120px;min-width:0;background:#E2E8F0;color:#000432;border:none;border-radius:999px;padding:5px 12px;font-size:12px;');
-          searchEl.placeholder = 'search name / code / part number...';
-          searchEl.addEventListener('input', renderList);
-          var bClose = mk('button', BTN, '✕');
-          bClose.addEventListener('click', close);
-          head.appendChild(searchEl);
-          head.appendChild(bClose);
-    
-          var bar = mk('div', 'display:flex;gap:6px;align-items:center;padding:0 8px 8px;border-bottom:1px solid #fff;flex-wrap:wrap;');
-          countEl = mk('span', 'flex:1 1 auto;', '0 selected');
-          var bTags = mk('button', BTN, 'COPY TAGS');
-          bTags.addEventListener('click', function () {
-            var s = selected();
-            if (!s.length) { toast('⚠️ Tick at least one part'); return; }
-            copyText(s.map(function (ch) { return '@part' + ch.n; }).join(' '), '✅ Copied ' + s.length + ' tag(s)');
-          });
-          var bCodes = mk('button', BTN, 'COPY CODE');
-          bCodes.addEventListener('click', function () {
-            var s = selected();
-            if (!s.length) { toast('⚠️ Tick at least one part'); return; }
-            copyText(s.map(function (ch) { return '=== PART ' + ch.n + ' (lines ' + ch.s + '-' + ch.e + ') ===\n' + ch.t; }).join('\n\n'), '✅ Copied code of ' + s.length + ' part(s)');
-          });
-          var bAll = mk('button', BTN, 'SELECT SHOWN');
-          bAll.addEventListener('click', function () {
-            shownList.forEach(function (ch) { picked[ch.n] = 1; });
-            renderList();
-            updateCount();
-          });
-          var bClr = mk('button', BTN, 'CLEAR');
-          bClr.addEventListener('click', function () {
-            picked = {};
-            renderList();
-            updateCount();
-          });
-          bar.appendChild(countEl);
-          bar.appendChild(bTags);
-          bar.appendChild(bCodes);
-          bar.appendChild(bAll);
-          bar.appendChild(bClr);
-    
-          listEl = mk('div', 'flex:1 1 auto;overflow:auto;');
-          box.appendChild(head);
-          box.appendChild(bar);
-          box.appendChild(listEl);
-          ov.appendChild(box);
-          ov.addEventListener('click', function (e) { if (e.target === ov) close(); });
-          document.body.appendChild(ov);
-          document.addEventListener('keydown', function (e) {
-            if (e.key === 'Escape' && ov && ov.style.display === 'flex') close();
-          });
-        }
-    
-        function close() {
-          if (ov) ov.style.display = 'none';
-        }
-    
-        function open() {
-          if (!sourceContent) { toast('⚠️ Load a file first'); return; }
-          window._liteChunks = null;
-          liteSource(sourceContent, '');
-          chunks = window._liteChunks || [];
-          if (!chunks.length) { toast('ℹ️ File is under 400 lines, it is sent whole (no parts)', 4000); return; }
-          if (!ov) build();
-          picked = {};
-          searchEl.value = '';
-          renderList();
-          updateCount();
-          ov.style.display = 'flex';
-        }
-    
-        btn.addEventListener('click', open);
-      })();
-  
+    function pmSetMode(on) {
+      pmUi = !!on;
+      if (!ov || !pmLayer) return;
+      ov.style.background = pmUi ? 'transparent' : '#000432';
+      pmHead.style.background = '#000432';
+      scroller.style.display = pmUi ? 'none' : 'block';
+      pmHint.style.display = pmUi ? 'none' : 'block';
+      pmLayer.style.display = pmUi ? 'block' : 'none';
+      pmModeBtn.textContent = pmUi ? '☰' : '🖼';
+      pmModeBtn.title = pmUi ? 'Switch to list view' : 'Switch to on-screen view';
+      pmSig = '';
+      if (pmUi) pmLayout();
+    }
+
+    function pmEnsure() {
+      if (!ov) build();
+      if (pmLayer) return;
+      pmHead = ov.childNodes[0];
+      pmHint = ov.childNodes[1];
+      pmLayer = mk('div', 'position:absolute;left:0;top:0;right:0;bottom:0;pointer-events:none;overflow:hidden;display:none;');
+      ov.appendChild(pmLayer);
+      pmModeBtn = mk('button', 'background:#000432;color:#fff;border:1px solid #fff;border-radius:999px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;', '☰');
+      pmModeBtn.addEventListener('click', function () { pmSetMode(!pmUi); });
+      pmHead.insertBefore(pmModeBtn, countEl);
+    }
+
+    var _paint0 = paint;
+    paint = function () { _paint0(); pmPaint(); };
+
+    var _openMap0 = openMap;
+    var _closeMap0 = closeMap;
+    openMap = function () {
+      _openMap0();
+      if (!isOpen) return;
+      pmEnsure();
+      pmSetMode(pmUi);
+      clearInterval(pmTimer);
+      pmTimer = setInterval(pmLayout, 500);
+    };
+    closeMap = function () {
+      clearInterval(pmTimer);
+      _closeMap0();
+      if (pmLayer) pmLayer.textContent = '';
+      pmSig = '';
+    };
+
+    function fitBottom() {
+      if (!ov) return;
+      var top = window.innerHeight;
+      ['controlBar', 'shortcutBar', 'statusBar'].forEach(function (id) {
+        var e = document.getElementById(id);
+        if (!e) return;
+        var r = e.getBoundingClientRect();
+        if (r.height > 0 && r.top > window.innerHeight / 2) top = Math.min(top, r.top);
+      });
+      ov.style.bottom = (window.innerHeight - top) + 'px';
+    }
+
+    function build() {
+      ov = mk('div', 'position:fixed;left:0;right:0;top:0;bottom:0;z-index:90;background:#000432;display:none;flex-direction:column;font-family:monospace;color:#fff;');
+      var head = mk('div', 'display:flex;gap:6px;align-items:center;padding:8px;border-bottom:1px solid #fff;flex-wrap:wrap;');
+      head.appendChild(mk('b', 'font-size:13px;', '🧩 PARTS MAP'));
+      searchEl = mk('input', 'flex:1 1 140px;min-width:0;background:#E2E8F0;color:#000432;border:none;border-radius:999px;padding:5px 12px;font-size:12px;');
+      searchEl.placeholder = 'search name / code / part number...';
+      searchEl.addEventListener('input', renderList);
+      countEl = mk('span', 'font-size:11px;', '0 tagged');
+      var bClr = mk('button', 'background:#000432;color:#fff;border:1px solid #fff;border-radius:999px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;', 'CLEAR');
+      bClr.addEventListener('click', function () {
+        $ins.value = $ins.value.replace(/(^|\s)@part\d+(?=\s|$)/g, '').replace(/^\s+/, '');
+        $ins.dispatchEvent(new Event('input', { bubbles: true }));
+        paint();
+      });
+      var bClose = mk('button', 'background:#000432;color:#fff;border:1px solid #fff;border-radius:999px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;', '✕');
+      bClose.addEventListener('click', closeMap);
+      head.appendChild(searchEl);
+      head.appendChild(countEl);
+      head.appendChild(bClr);
+      head.appendChild(bClose);
+      var hint = mk('div', 'padding:4px 10px;font-size:10px;opacity:0.8;', 'Tap a yellow/white header = add or remove its @part tag in the prompt box. Tap the code below it = expand / collapse.');
+      scroller = mk('div', 'flex:1 1 auto;overflow:auto;padding:6px 0;');
+      ov.appendChild(head);
+      ov.appendChild(hint);
+      ov.appendChild(scroller);
+      document.body.appendChild(ov);
+      $ins.addEventListener('input', function () { if (isOpen) paint(); });
+      window.addEventListener('resize', fitBottom);
+      document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && isOpen) closeMap(); });
+    }
+
+    function openMap() {
+      if (!sourceContent) { toast('⚠️ Load a file first'); return; }
+      loadChunks();
+      if (!chunks.length) { toast('ℹ️ File is under 400 lines, it is sent whole (no parts)', 4000); return; }
+      if (!ov) build();
+      searchEl.value = '';
+      renderList();
+      fitBottom();
+      ov.style.display = 'flex';
+      isOpen = true;
+      btn.style.background = '#FFD700';
+      btn.style.color = '#000432';
+      watch = setInterval(function () {
+        if (isOpen && sourceContent !== lastSrc) { loadChunks(); renderList(); }
+        fitBottom();
+      }, 1500);
+    }
+
+    function closeMap() {
+      if (ov) ov.style.display = 'none';
+      isOpen = false;
+      clearInterval(watch);
+      btn.style.background = '';
+      btn.style.color = '#ffffff';
+    }
+
+    btn.addEventListener('click', function () { if (isOpen) closeMap(); else openMap(); });
+  })();
+
   function scanFileForTerms() {
     var instr = document.getElementById('aiInstruction').value.trim();
     if (!sourceContent) { toast("❌ No source loaded"); return; }
@@ -2304,7 +2038,7 @@ pmSig = '';
     setTimeout(function () { isInternalCopy = false; }, 1500);
   }
   document.getElementById('scanBtn').addEventListener('click', scanFileForTerms);
-  
+
   function replaceEverywhere() {
     var instr = document.getElementById('aiInstruction').value;
     var halves = instr.split('=>');
@@ -2332,7 +2066,7 @@ pmSig = '';
     toast("🔁 Replaced " + count + " matches — ↶ to undo");
   }
   document.getElementById('replaceAllBtn').addEventListener('click', replaceEverywhere);
-  
+
   async function autoAddTagsFromClipboard() {
     try {
       var text = '';
@@ -2360,132 +2094,10 @@ pmSig = '';
       box.value = (box.value.trim() + ' ' + add.join(' ')).trim();
       toast("📎 Auto-added " + add.length + " tag(s) from clipboard");
     } catch (err) {}
-      }
-      /*
-      ') >= 0 || clipText.indexOf('LITE MODE') >= 0 || clipText.indexOf('INDEX MODE') >= 0) return;
-          var foundTags = clipText.match(/@[\w$-]+/g) || [];
-          if (!foundTags.length) return;
-          if (!window._liteChunks) liteSource(sourceContent, '');
-          var knownTags = {};
-          (window._liteChunks || []).forEach(function (ch) {
-            knownTags['part' + ch.n] = 1;
-            knownTags['p' + ch.n] = 1;
-            ch.names.forEach(function (x) { knownTags[x.toLowerCase()] = 1; });
-          });
-          var instrBox = document.getElementById('aiInstruction');
-          var haveTags = (instrBox.value.match(/@[\w$-]+/g) || []).map(function (x) { return x.toLowerCase(); });
-          var freshTags = foundTags.filter(function (tg, i) {
-            return foundTags.indexOf(tg) === i && knownTags[tg.slice(1).toLowerCase()] === 1 && haveTags.indexOf(tg.toLowerCase()) < 0;
-          });
-          if (!freshTags.length) return;
-          lastAuto = clipText;
-          document.getElementById('payloadBtn').click();
-        } catch (err) {
-        } finally {
-          setTimeout(function () { busy = false; }, 800);
-        }
-      }, true);
-    })();
-  ===SPLIT===
-    */
-    // ── Auto-payload: pasting into the instruction box (or tapping any input with @part tags on the clipboard) builds + copies the payload ──
-    (function initAutoTagPayload() {
-      var lastAuto = '';
-      var busy = false;
-      function isKnownTag(tag) {
-        var key = tag.slice(1).toLowerCase();
-        if (/^(part|p)\d+$/.test(key)) return true;
-        if (!window._liteChunks && sourceContent) liteSource(sourceContent, '');
-        var hit = false;
-        (window._liteChunks || []).forEach(function (ch) {
-          if (ch.names.some(function (x) { return x.toLowerCase() === key; })) hit = true;
-        });
-        return hit;
-      }
-      function fireFromBox() {
-        if (busy || !sourceContent) return;
-        var box = document.getElementById('aiInstruction');
-        var tags = (box.value.match(/@[\w$-]+/g) || []).filter(isKnownTag);
-        if (!tags.length) return;
-        busy = true;
-        toast("🧩 Tags detected — building payload");
-        document.getElementById('payloadBtn').click();
-        setTimeout(function () { busy = false; }, 1000);
-      }
-      document.addEventListener('paste', function (e) {
-        var t = e.target;
-        if (!t || t.id !== 'aiInstruction') return;
-        setTimeout(fireFromBox, 80);
-      }, true);
-      document.addEventListener('input', function (e) {
-        var t = e.target;
-        if (!t || t.id !== 'aiInstruction') return;
-        if (e.inputType !== 'insertFromPaste' && e.inputType !== 'insertFromDrop') return;
-        setTimeout(fireFromBox, 80);
-      }, true);
-      document.addEventListener('focusin', async function (e) {
-        var t = e.target;
-        if (busy || !t || !t.tagName) return;
-        var tn = String(t.tagName).toUpperCase();
-        if (tn !== 'INPUT' && tn !== 'TEXTAREA') return;
-        if (t.type === 'password' || t.type === 'file' || t.type === 'checkbox') return;
-        if (!sourceContent) return;
-        busy = true;
-        try {
-          var clipText = '';
-          if (window.AndroidClipboard && typeof window.AndroidClipboard.read === 'function') {
-            clipText = window.AndroidClipboard.read();
-          } else {
-            clipText = await navigator.clipboard.readText();
-          }
-          if (!clipText || clipText === lastAuto || clipText === lastClip || clipText.length > 4000) return;
-          if (clipText.indexOf('===SPLIT===') >= 0 || clipText.indexOf('LITE MODE') >= 0 || clipText.indexOf('INDEX MODE') >= 0) return;
-          var foundTags = clipText.match(/@[\w$-]+/g) || [];
-          if (!foundTags.length) return;
-          var instrBox = document.getElementById('aiInstruction');
-          var haveTags = (instrBox.value.match(/@[\w$-]+/g) || []).map(function (x) { return x.toLowerCase(); });
-          var freshTags = foundTags.filter(function (tg, i) {
-            return foundTags.indexOf(tg) === i && isKnownTag(tg) && haveTags.indexOf(tg.toLowerCase()) < 0;
-          });
-          if (!freshTags.length) return;
-          lastAuto = clipText;
-          instrBox.value = (instrBox.value.trim() + ' ' + freshTags.join(' ')).trim();
-                    toast("🧩 Tags detected — building payload");
-                    document.getElementById('payloadBtn').click();
-                  } catch (err) {
-                  } finally {
-                    setTimeout(function () { busy = false; }, 800);
-                  }
-                }, true);
-              })();
-          /*===SPLIT===') >= 0 || clipText.indexOf('LITE MODE') >= 0 || clipText.indexOf('INDEX MODE') >= 0) return;
-          var foundTags = clipText.match(/@[\w$-]+/g) || [];
-          if (!foundTags.length) return;
-          if (!window._liteChunks) liteSource(sourceContent, '');
-          var knownTags = {};
-          (window._liteChunks || []).forEach(function (ch) {
-            knownTags['part' + ch.n] = 1;
-            knownTags['p' + ch.n] = 1;
-            ch.names.forEach(function (x) { knownTags[x.toLowerCase()] = 1; });
-          });
-          var instrBox = document.getElementById('aiInstruction');
-          var haveTags = (instrBox.value.match(/@[\w$-]+/g) || []).map(function (x) { return x.toLowerCase(); });
-          var freshTags = foundTags.filter(function (tg, i) {
-            return foundTags.indexOf(tg) === i && knownTags[tg.slice(1).toLowerCase()] === 1 && haveTags.indexOf(tg.toLowerCase()) < 0;
-          });
-          if (!freshTags.length) return;
-          lastAuto = clipText;
-          document.getElementById('payloadBtn').click();
-        } catch (err) {
-        } finally {
-          setTimeout(function () { busy = false; }, 800);
-        }
-      }, true);
-    })();
-  
-    */
-    document.getElementById('tagsBtn').addEventListener('click', async function () {
-      var text = '';
+  }
+
+  document.getElementById('tagsBtn').addEventListener('click', async function () {
+    var text = '';
     try {
       if (window.AndroidClipboard && typeof window.AndroidClipboard.read === 'function') {
         text = window.AndroidClipboard.read();
@@ -2504,248 +2116,146 @@ pmSig = '';
     box.value = (box.value.trim() + ' ' + add.join(' ')).trim();
     toast("📎 Added " + add.length + " tag(s) — press ▲");
   });
-  
-  // ── @patch mode: after the index payload, the input bar becomes a one-tap @patch button ──
-    (function initPatcher() {
-      var box = document.getElementById('aiInstruction');
-      if (!box) return;
-      var armed = false, firing = false, request = '', pressTimer = null;
-      var normalPlaceholder = box.placeholder;
-  
-      var css = document.createElement('style');
-      css.textContent =
-        'html body.compact-layout #controlBar #aiInstruction.patch-armed{background:#FFD700 !important;cursor:pointer !important;font-weight:800 !important;text-align:center !important;caret-color:transparent !important;-webkit-user-select:none !important;user-select:none !important;}' +
-        'html body.compact-layout #controlBar #aiInstruction.patch-armed::placeholder{color:#000432 !important;-webkit-text-fill-color:#000432 !important;opacity:1 !important;font-weight:800 !important;}';
-      document.head.appendChild(css);
-  
-      function isKnownTag(tag) {
-        var key = tag.slice(1).toLowerCase();
-        if (key === 'auto' || /^(part|p)\d+$/.test(key)) return true;
-        if (!window._liteChunks && sourceContent) liteSource(sourceContent, '');
-        return (window._liteChunks || []).some(function (ch) {
-          return ch.names.some(function (x) { return x.toLowerCase() === key; });
-        });
-      }
-  
-      function setArmed(on, req) {
-        armed = on;
-        if (on) {
-          request = req || '';
-          box.value = '';
-          box.readOnly = true;
-          box.placeholder = '📎 @patch';
-          box.classList.add('patch-armed');
-          box.blur();
-        } else {
-          request = '';
-          box.readOnly = false;
-          box.placeholder = normalPlaceholder;
-          box.classList.remove('patch-armed');
-        }
-      }
-  
-      window._patcherArm = function (req) { firing = false; setArmed(true, req); };
-      window._patcherFinish = function () {
-        if (!firing) return;
-        firing = false;
-        box.value = '';
-        setArmed(false);
-      };
-  
-      function readClip() {
+
+  // ── Auto-patch: after the index payload, watch the clipboard; an AI reply with @parts builds + copies the payload by itself ──
+  (function initAutoPatch() {
+    var box = document.getElementById('aiInstruction');
+    var payloadBtn = document.getElementById('payloadBtn');
+    if (!box || !payloadBtn) return;
+    var SPLIT_MARK = '===' + 'SPLIT' + '===';
+    var on = true;
+    try { on = localStorage.getItem('aicompiler_autopatch') !== 'off'; } catch (e0) {}
+    var watching = false, request = '', lastSeen = null, busy = false, reading = false, timer = null;
+    var basePlaceholder = box.placeholder;
+
+    var css = document.createElement('style');
+    css.textContent =
+      'html body.compact-layout #controlBar #autoPatchBtn{background:#E2E8F0 !important;flex:0 0 auto !important;min-width:34px !important;padding:0 12px !important;font-size:14px !important;display:inline-flex !important;align-items:center !important;justify-content:center !important;}' +
+      'html body.compact-layout #controlBar #autoPatchBtn.ap-on{background:#7df5c0 !important;}' +
+      'html body.compact-layout #controlBar #autoPatchBtn.ap-watch{background:#FFD700 !important;animation:apPulse 1.1s ease-in-out infinite alternate;}' +
+      '@keyframes apPulse{from{opacity:.55}to{opacity:1}}' +
+      'html body.compact-layout #controlBar #aiInstruction.ap-watch::placeholder{color:#000432 !important;-webkit-text-fill-color:#000432 !important;opacity:1 !important;font-weight:800 !important;}';
+    document.head.appendChild(css);
+
+    var btn = document.createElement('button');
+    btn.id = 'autoPatchBtn';
+    btn.className = 'btn';
+    btn.textContent = '⚡';
+    payloadBtn.parentNode.insertBefore(btn, payloadBtn.nextSibling);
+
+    function paintBtn() {
+      btn.classList.toggle('ap-on', on && !watching);
+      btn.classList.toggle('ap-watch', on && watching);
+      box.classList.toggle('ap-watch', on && watching);
+      box.placeholder = (on && watching) ? '👁 Auto-patch: copy the AI reply…' : basePlaceholder;
+      btn.title = !on ? 'Manual mode (auto-patch OFF) — click to turn ON'
+        : watching ? 'Auto-patch is watching the clipboard — click for manual mode'
+        : 'Auto-patch ON — press ▲ with your prompt to start. Click for manual mode';
+    }
+
+    function readClip() {
+      try {
         if (window.AndroidClipboard && typeof window.AndroidClipboard.read === 'function') {
           return Promise.resolve(window.AndroidClipboard.read());
         }
         return navigator.clipboard.readText();
-      }
-  
-      box.addEventListener('click', function () {
-        if (!armed || firing) return;
-        readClip().then(function (text) {
-          text = text || '';
-          if (text.indexOf('INDEX MODE') >= 0 || text.indexOf('LITE MODE') >= 0 || text.indexOf('===SPLIT===') >= 0) {
-            toast("ℹ Copy Claude's reply first, then tap @patch");
-            return;
-          }
-          var found = (text.match(/@[\w$-]+/g) || []).filter(function (t, i, a) {
-            return a.indexOf(t) === i && isKnownTag(t);
-          });
-          if (!found.length) { toast("ℹ No @parts in clipboard — copy Claude's reply first"); return; }
-          firing = true;
-          box.value = (request + ' ' + found.join(' ')).trim();
-          toast("🧩 Patching with " + found.length + " part(s)");
-          document.getElementById('payloadBtn').click();
+      } catch (e1) { return Promise.reject(e1); }
+    }
+
+    function isKnownTag(tag) {
+      var key = tag.slice(1).toLowerCase();
+      if (/^(part|p)\d+$/.test(key)) return true;
+      if (!window._liteChunks && sourceContent) liteSource(sourceContent, '');
+      return (window._liteChunks || []).some(function (ch) {
+        return ch.names.some(function (x) { return x.toLowerCase() === key; });
+      });
+    }
+
+    function stopTimer() { if (timer) { clearInterval(timer); timer = null; } }
+    function startTimer() { stopTimer(); timer = setInterval(check, 700); }
+
+    function disarm(msg) {
+      watching = false;
+      request = '';
+      stopTimer();
+      paintBtn();
+      if (msg) toast(msg, 4000);
+    }
+
+    function fire(tags) {
+      busy = true;
+      var saved = box.value, before = lastClip, n = 0;
+      box.value = (request + ' ' + tags.join(' ')).trim();
+      toast('⚡ Auto-patch: ' + tags.length + ' part(s) — payload copied, paste it to the AI');
+      payloadBtn.click();
+      var iv = setInterval(function () {
+        n++;
+        if (lastClip !== before || n > 50) {
+          clearInterval(iv);
           setTimeout(function () {
-            if (firing) { firing = false; box.value = ''; }
-          }, 8000);
-        }, function () { toast("❌ Couldn't read clipboard"); });
-      });
-  
-      box.addEventListener('pointerdown', function () {
-        if (!armed) return;
-        clearTimeout(pressTimer);
-        pressTimer = setTimeout(function () {
-          var req = request;
-          setArmed(false);
-          box.value = req;
-          toast("↩ @patch cancelled — request restored");
-        }, 700);
-      });
-      ['pointerup', 'pointerleave', 'pointercancel'].forEach(function (ev) {
-        box.addEventListener(ev, function () { clearTimeout(pressTimer); });
-      });
-  
-      window.addEventListener('focusin', function (e) {
-        var t = e.target;
-        if (t && t.tagName && /^(INPUT|TEXTAREA)$/i.test(t.tagName)) e.stopPropagation();
-      }, true);
-      window.addEventListener('paste', function (e) {
-        if (e.target && e.target.id === 'aiInstruction') e.stopPropagation();
-      }, true);
-      window.addEventListener('input', function (e) {
-        if (e.target && e.target.id === 'aiInstruction' && (e.inputType === 'insertFromPaste' || e.inputType === 'insertFromDrop')) e.stopPropagation();
-      }, true);
-    })();
-  
-    // ── Auto-patch: after the index payload, watch the clipboard; an AI reply with @parts builds + copies the payload by itself ──
-      (function initAutoPatch() {
-        var box = document.getElementById('aiInstruction');
-        var payloadBtn = document.getElementById('payloadBtn');
-        if (!box || !payloadBtn) return;
-        var SPLIT_MARK = '===' + 'SPLIT' + '===';
-        var on = true;
-        try { on = localStorage.getItem('aicompiler_autopatch') !== 'off'; } catch (e0) {}
-        var watching = false, request = '', lastSeen = null, busy = false, reading = false, timer = null;
-        var basePlaceholder = box.placeholder;
-    
-        var css = document.createElement('style');
-        css.textContent =
-          'html body.compact-layout #controlBar #autoPatchBtn{background:#E2E8F0 !important;flex:0 0 auto !important;min-width:34px !important;padding:0 12px !important;font-size:14px !important;display:inline-flex !important;align-items:center !important;justify-content:center !important;}' +
-          'html body.compact-layout #controlBar #autoPatchBtn.ap-on{background:#7df5c0 !important;}' +
-          'html body.compact-layout #controlBar #autoPatchBtn.ap-watch{background:#FFD700 !important;animation:apPulse 1.1s ease-in-out infinite alternate;}' +
-          '@keyframes apPulse{from{opacity:.55}to{opacity:1}}' +
-          'html body.compact-layout #controlBar #aiInstruction.ap-watch::placeholder{color:#000432 !important;-webkit-text-fill-color:#000432 !important;opacity:1 !important;font-weight:800 !important;}';
-        document.head.appendChild(css);
-    
-        var btn = document.createElement('button');
-        btn.id = 'autoPatchBtn';
-        btn.className = 'btn';
-        btn.textContent = '⚡';
-        payloadBtn.parentNode.insertBefore(btn, payloadBtn.nextSibling);
-    
-        function paintBtn() {
-          btn.classList.toggle('ap-on', on && !watching);
-          btn.classList.toggle('ap-watch', on && watching);
-          box.classList.toggle('ap-watch', on && watching);
-          box.placeholder = (on && watching) ? '👁 Auto-patch: copy the AI reply…' : basePlaceholder;
-          btn.title = !on ? 'Manual mode (auto-patch OFF) — click to turn ON'
-            : watching ? 'Auto-patch is watching the clipboard — click for manual mode'
-            : 'Auto-patch ON — press ▲ with your prompt to start. Click for manual mode';
-        }
-    
-        function readClip() {
-          try {
-            if (window.AndroidClipboard && typeof window.AndroidClipboard.read === 'function') {
-              return Promise.resolve(window.AndroidClipboard.read());
-            }
-            return navigator.clipboard.readText();
-          } catch (e1) { return Promise.reject(e1); }
-        }
-    
-        function isKnownTag(tag) {
-          var key = tag.slice(1).toLowerCase();
-          if (/^(part|p)\d+$/.test(key)) return true;
-          if (!window._liteChunks && sourceContent) liteSource(sourceContent, '');
-          return (window._liteChunks || []).some(function (ch) {
-            return ch.names.some(function (x) { return x.toLowerCase() === key; });
-          });
-        }
-    
-        function stopTimer() { if (timer) { clearInterval(timer); timer = null; } }
-        function startTimer() { stopTimer(); timer = setInterval(check, 700); }
-    
-        function disarm(msg) {
-          watching = false;
-          request = '';
-          stopTimer();
-          paintBtn();
-          if (msg) toast(msg, 4000);
-        }
-    
-        function fire(tags) {
-          busy = true;
-          var saved = box.value, before = lastClip, n = 0;
-          box.value = (request + ' ' + tags.join(' ')).trim();
-          toast('⚡ Auto-patch: ' + tags.length + ' part(s) — payload copied, paste it to the AI');
-          payloadBtn.click();
-          var iv = setInterval(function () {
-            n++;
-            if (lastClip !== before || n > 50) {
-              clearInterval(iv);
-              setTimeout(function () {
-                box.value = saved;
-                busy = false;
-                paintBtn();
-              }, 300);
-            }
-          }, 100);
-        }
-    
-        function check() {
-          if (!on || !watching || busy || reading || !sourceContent) return;
-          var bridge = !!(window.AndroidClipboard && typeof window.AndroidClipboard.read === 'function');
-          if (!bridge && !document.hasFocus()) return;
-          reading = true;
-          readClip().then(function (text) {
-            reading = false;
-            text = text || '';
-            if (text === lastSeen) return;
-            lastSeen = text;
-            if (!watching || !text.trim()) return;
-            if (text.indexOf('\u200B\u200B\u200B') >= 0 || text.indexOf('LITE MODE') >= 0 || text.indexOf('INDEX MODE') >= 0) return;
-            if (text.indexOf(SPLIT_MARK) >= 0) { disarm('✅ Patch received — auto-patch finished. Press ⌘ to apply.'); return; }
-            if (text.length > 4000) return;
-            var found = (text.match(/@[\w$-]+/g) || []).filter(function (t, i, a) {
-              return a.indexOf(t) === i && isKnownTag(t);
-            });
-            if (!found.length) return;
-            fire(found);
-          }, function () { reading = false; });
-        }
-    
-        window._autoArm = function (req) {
-          if (!on) return;
-          request = req || '';
-          watching = true;
-          lastSeen = null;
-          busy = false;
-          box.value = '';
-          paintBtn();
-          startTimer();
-        };
-        window._autoRelease = function () { if (watching) disarm(); };
-    
-        btn.addEventListener('click', function () {
-          on = !on;
-          try { localStorage.setItem('aicompiler_autopatch', on ? 'on' : 'off'); } catch (e2) {}
-          if (!on) {
-            var req = request;
-            disarm();
-            if (req && !box.value) box.value = req;
-            toast('🖐 Manual mode — auto-patch OFF');
-          } else {
+            box.value = saved;
+            busy = false;
             paintBtn();
-            toast('⚡ Auto-patch ON — type your prompt and press ▲');
-          }
+          }, 300);
+        }
+      }, 100);
+    }
+
+    function check() {
+      if (!on || !watching || busy || reading || !sourceContent) return;
+      var bridge = !!(window.AndroidClipboard && typeof window.AndroidClipboard.read === 'function');
+      if (!bridge && !document.hasFocus()) return;
+      reading = true;
+      readClip().then(function (text) {
+        reading = false;
+        text = text || '';
+        if (text === lastSeen) return;
+        lastSeen = text;
+        if (!watching || !text.trim()) return;
+        if (text.indexOf('\u200B\u200B\u200B') >= 0 || text.indexOf('LITE MODE') >= 0 || text.indexOf('INDEX MODE') >= 0) return;
+        if (text.indexOf(SPLIT_MARK) >= 0) { disarm('✅ Patch received — auto-patch finished. Press ⌘ to apply.'); return; }
+        if (text.length > 4000) return;
+        var found = (text.match(/@[\w$-]+/g) || []).filter(function (t, i, a) {
+          return a.indexOf(t) === i && isKnownTag(t);
         });
-    
-        document.addEventListener('visibilitychange', function () { if (!document.hidden) check(); });
-        window.addEventListener('focus', check);
+        if (!found.length) return;
+        fire(found);
+      }, function () { reading = false; });
+    }
+
+    window._autoArm = function (req) {
+      if (!on) return;
+      request = req || '';
+      watching = true;
+      lastSeen = null;
+      busy = false;
+      box.value = '';
+      paintBtn();
+      startTimer();
+    };
+    window._autoRelease = function () { if (watching) disarm(); };
+
+    btn.addEventListener('click', function () {
+      on = !on;
+      try { localStorage.setItem('aicompiler_autopatch', on ? 'on' : 'off'); } catch (e2) {}
+      if (!on) {
+        var req = request;
+        disarm();
+        if (req && !box.value) box.value = req;
+        toast('🖐 Manual mode — auto-patch OFF');
+      } else {
         paintBtn();
-      })();
-    
-      document.getElementById('payloadBtn').addEventListener('click', async () => {
-      await autoAddTagsFromClipboard();
+        toast('⚡ Auto-patch ON — type your prompt and press ▲');
+      }
+    });
+
+    document.addEventListener('visibilitychange', function () { if (!document.hidden) check(); });
+    window.addEventListener('focus', check);
+    paintBtn();
+  })();
+
+  document.getElementById('payloadBtn').addEventListener('click', async () => {
+    await autoAddTagsFromClipboard();
     const instruction = document.getElementById('aiInstruction').value.trim();
     const wantSuper = document.getElementById('incSuperPrompt').checked;
     const wantInstr = document.getElementById('incInstructions').checked;
@@ -2760,17 +2270,17 @@ pmSig = '';
     if (wantSuper && !_idx) parts.push(SUPER_PROMPT);
     if (wantInstr && instruction) parts.push(instruction);
     if (wantSource) {
-          var liteBox = document.getElementById('incLite');
-          parts.push(_idx ? liteIndex(sourceContent, instruction) : (sourceContent ? ((liteBox && liteBox.checked) ? liteSource(sourceContent, instruction) : sourceContent) : "(No source loaded)"));
-        }
+      var liteBox = document.getElementById('incLite');
+      parts.push(_idx ? liteIndex(sourceContent, instruction) : (sourceContent ? ((liteBox && liteBox.checked) ? liteSource(sourceContent, instruction) : sourceContent) : "(No source loaded)"));
+    }
 
     if (parts.length === 0) {
       toast("⚠️ Nothing selected — check at least one box");
       return;
     }
-    
-    // Join with a blank line between each section, and append 
-    // the invisible 3-space signature for AutoPayload.ahk to detect
+
+    // Join with a blank line between each section, and append
+    // the invisible 3-char signature for AutoPayload.ahk to detect
     var payload = parts.join("\n\n") + "\u200B\u200B\u200B";
 
     try {
@@ -2779,9 +2289,9 @@ pmSig = '';
       await navigator.clipboard.writeText(payload);
       setTimeout(() => { isInternalCopy = false; }, 1500);
       toast(_idx ? "🧭 Index copied (no code) — paste to Claude, copy its reply — auto-patch does the rest" : "🚀 Payload Copied! Paste it into Claude.");
-            if (_hasTags || _auto) { var _bx = document.getElementById('aiInstruction'); _bx.value = _bx.value.replace(/\s*@[\w$-]+/g, '').trim(); }
-            if (_idx && window._autoArm) window._autoArm(instruction);
-            else if (!_hasTags && window._autoRelease) window._autoRelease();
+      if (_hasTags || _auto) { var _bx = document.getElementById('aiInstruction'); _bx.value = _bx.value.replace(/\s*@[\w$-]+/g, '').trim(); }
+      if (_idx && window._autoArm) window._autoArm(instruction);
+      else if (!_hasTags && window._autoRelease) window._autoRelease();
       document.getElementById('statusLeft').textContent = '🚀 Payload copied — paste into Claude, then Copy its reply';
     } catch (err) { toast("❌ Failed to copy payload"); }
   });
@@ -2791,14 +2301,14 @@ pmSig = '';
   document.getElementById('pasteAndProcessBtn').addEventListener('click', async () => {
     if (!sourceContent) { toast("❌ No source loaded — link a file first"); return; }
     let text = "";
-    try { 
+    try {
       // 1. Detect custom UrlHud Android Bridge
       if (window.AndroidClipboard && typeof window.AndroidClipboard.read === 'function') {
         text = window.AndroidClipboard.read();
-      } 
+      }
       // 2. Fall back to standard browser API
       else {
-        text = await navigator.clipboard.readText(); 
+        text = await navigator.clipboard.readText();
       }
     }
     catch (err) { toast("❌ Couldn't read clipboard — copy the patch from Claude first"); return; }
@@ -2905,14 +2415,6 @@ pmSig = '';
     $astContent.innerHTML = results.join('<br>');
   }
 
-  function astGuardAfterApply() {
-    // AST Guard disabled per user request
-    if ($astPanel.style.display === 'block' && sourceContent) {
-      runASTCheck(sourceContent);
-    }
-    return true;
-  }
-
   // ── Patch Parsing ─────────────────────────────────────────────────────
   function parseAllBlocks(text) {
     const normalized = text.replace(/\r\n/g, '\n');
@@ -2996,17 +2498,14 @@ pmSig = '';
     clearTimeout(renderTimer);
     renderTimer = setTimeout(() => {
       try { localStorage.setItem('aicompiler_source', src); }
-            catch (e) {
-              try { localStorage.removeItem('aicompiler_source'); } catch (e2) {}
-              if (!window._lsWarned) { window._lsWarned = true; toast('⚠️ File too big for local backup — push to GitHub to save', 5000); }
-            }
+      catch (e) {
+        try { localStorage.removeItem('aicompiler_source'); } catch (e2) {}
+        if (!window._lsWarned) { window._lsWarned = true; toast('⚠️ File too big for local backup — push to GitHub to save', 5000); }
+      }
       if (isCodeMode) {
         $codeView.value = src; flash(); updateStatusBar();
       } else {
-        try {
-          const bridge = `<script>window.onerror=function(msg,src,line,col,err){window.parent.postMessage({__compilerErr:'Line '+line+': '+msg},'*');return true;};window.addEventListener('unhandledrejection',function(e){window.parent.postMessage({__compilerErr:'Unhandled promise: '+(e.reason||'unknown')},'*');});<\/script>`;
-          $pv.srcdoc = bridge + src;
-        } catch(e) {}
+        try { $pv.srcdoc = src; } catch(e) {}
         flash(); updateStatusBar();
       }
     }, 100);
@@ -3254,7 +2753,3 @@ pmSig = '';
 </script>
 </body>
 </html>
-​​​
-​​​
-​​​
-​​​
