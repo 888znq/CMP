@@ -2204,7 +2204,8 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
     }
 
     function check() {
-      if (!on || !watching || busy || reading || !sourceContent) return;
+      if (window.__extBridge) return;
+            if (!on || !watching || busy || reading || !sourceContent) return;
       var bridge = !!(window.AndroidClipboard && typeof window.AndroidClipboard.read === 'function');
       if (!bridge && !document.hasFocus()) return;
       reading = true;
@@ -2239,6 +2240,7 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
       startTimer();
     };
     window._autoRelease = function () { if (watching) disarm(); };
+        window._autoIsOn = function () { return on; };
         window._autoRearm = function () {
           if (!on) return;
           request = '';
@@ -2271,8 +2273,47 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
     paintBtn();
   })();
 
-  document.getElementById('payloadBtn').addEventListener('click', async () => {
-    await autoAddTagsFromClipboard();
+  (function initExtBridge() {
+    if (window.parent === window) return;
+    window.__extBridge = true;
+    var box = document.getElementById('aiInstruction');
+    var payloadBtn = document.getElementById('payloadBtn');
+    var applyBtn = document.getElementById('pasteAndProcessBtn');
+    var SPLIT_MARK = '===' + 'SPLIT' + '===';
+  
+    window.__extSend = function (text) {
+      if (window._autoIsOn && !window._autoIsOn()) return false;
+      try { window.parent.postMessage({ sendToAI: String(text).replace(/\u200B/g, '') }, '*'); return true; }
+      catch (e) { return false; }
+    };
+  
+    function isKnownTag(tag) {
+      var key = tag.slice(1).toLowerCase();
+      if (/^(part|p)\d+$/.test(key)) return true;
+      if (!window._liteChunks && sourceContent) liteSource(sourceContent, '');
+      return (window._liteChunks || []).some(function (ch) {
+        return ch.names.some(function (x) { return x.toLowerCase() === key; });
+      });
+    }
+  
+    function applyPatch(text) {
+      var old = window.AndroidClipboard;
+      window.AndroidClipboard = { read: function () { return text; } };
+      try { applyBtn.click(); }
+      finally { if (old === undefined) delete window.AndroidClipboard; else window.AndroidClipboard = old; }
+    }
+  
+    window.addEventListener('message', function (e) {
+      if (e.source !== window.parent) return;
+      var d = e.data;
+      if (!d || typeof d.aiReply !== 'string') return;
+      if (window._autoIsOn && !window._autoIsOn()) return;
+      var text = d.aiReply;
+      if (window._autoRelease) window._autoRelease();
+      var codes = (d.aiCode || []).filter(function (c) { return c.indexOf(SPLIT_MARK) >= 0; });
+      if (codes.length || text.indexOf(SPLIT_MARK) >= 0) {
+        applyPatch(codes.length ? codes.join('\n
+    if (!window.__extBridge) await autoAddTagsFromClipboard();
     const instruction = document.getElementById('aiInstruction').value.trim();
     const wantSuper = document.getElementById('incSuperPrompt').checked;
     const wantInstr = document.getElementById('incInstructions').checked;
@@ -2303,7 +2344,8 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
     try {
       isInternalCopy = true;
       lastClip = payload;
-      await navigator.clipboard.writeText(payload);
+      var _sent = window.__extSend ? window.__extSend(payload) : false;
+            try { await navigator.clipboard.writeText(payload); } catch (cwErr) { if (!_sent) throw cwErr; }
             window._payloadSeq = (window._payloadSeq || 0) + 1;
       setTimeout(() => { isInternalCopy = false; }, 1500);
       toast(_idx ? "🧭 Index copied (no code) — paste to Claude, copy its reply — auto-patch does the rest" : "🚀 Payload Copied! Paste it into Claude.");
