@@ -2312,7 +2312,22 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
       if (window._autoRelease) window._autoRelease();
       var codes = (d.aiCode || []).filter(function (c) { return c.indexOf(SPLIT_MARK) >= 0; });
       if (codes.length || text.indexOf(SPLIT_MARK) >= 0) {
-        applyPatch(codes.length ? codes.join('\n
+        var BLOCK_SEP = '\n' + '===' + 'BLOCK' + '===' + '\n';
+        applyPatch(codes.length ? codes.join(BLOCK_SEP) : text);
+        return;
+        }
+        if (text.length > 4000 || text.indexOf('LITE MODE') >= 0 || text.indexOf('INDEX MODE') >= 0) return;
+        var found = (text.match(/@[\w$-]+/g) || []).filter(function (t, i, a) {
+          return a.indexOf(t) === i && isKnownTag(t);
+        });
+        if (!found.length) return;
+        var req = text.replace(/@[\w$-]+/g, ' ').replace(/\s+/g, ' ').trim();
+        box.value = (req + ' ' + found.join(' ')).trim();
+        payloadBtn.click();
+        });
+        })();
+        
+        document.getElementById('payloadBtn').addEventListener('click', async () => {
     if (!window.__extBridge) await autoAddTagsFromClipboard();
     const instruction = document.getElementById('aiInstruction').value.trim();
     const wantSuper = document.getElementById('incSuperPrompt').checked;
