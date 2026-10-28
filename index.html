@@ -2350,9 +2350,11 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
     window.__AUTO_APPLY_PATCH = false;   // false = you apply patches yourself with the ⌘ button; true = auto-apply
     window.__AI_AUTO_PASTE = false;   // false = payload is only copied and you paste it into the AI yourself; true = old auto-paste
     window.__extSend = function (text) {
-      if (window.__AI_AUTO_PASTE !== true) return false;
-      if (window._autoIsOn && !window._autoIsOn()) return false;
-      try { window.parent.postMessage({ sendToAI: String(text).replace(/\u200B/g, '') }, '*'); return true; }
+      var nuts = window.__NUTS === true;
+      if (nuts) nutsSeen = '';
+      if (!nuts && window.__AI_AUTO_PASTE !== true) return false;
+      if (!nuts && window._autoIsOn && !window._autoIsOn()) return false;
+      try { window.parent.postMessage({ sendToAI: String(text).replace(/\u200B/g, ''), nuts: nuts }, '*'); return true; }
       catch (e) { return false; }
     };
   
@@ -2381,6 +2383,54 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
     };
     window.__extReadDone = function (txt) { if (_readOk) _readOk(txt); };
     window.__extReadFail = function (why) { if (_readNo) _readNo(why); };
+    // ── TOTAL NUTS MODE (separate button, default OFF) ──
+    // ON = payload auto-pastes into the AI pane, the AI pane is force-scrolled while it generates,
+    // and the patch is applied only after the reply is fully finished.
+    window.__NUTS = false;
+    var NUTS_FAST_DELAY = 2000;   // reply confirmed final by the AI pane
+    var NUTS_SLOW_DELAY = 6000;   // reply not confirmed final: wait longer before touching the app
+    var nutsTimer = 0;
+    var nutsSeen = '';
+    var nutsStyle = document.createElement('style');
+    nutsStyle.textContent =
+      'html body.compact-layout #controlBar #nutsBtn{background:#E2E8F0 !important;flex:0 0 auto !important;min-width:34px !important;padding:0 12px !important;font-size:14px !important;display:inline-flex !important;align-items:center !important;justify-content:center !important;}' +
+      'html body.compact-layout #controlBar #nutsBtn.nuts-on{background:#ff4d4d !important;animation:nutsPulse 1s ease-in-out infinite alternate;}' +
+      '@keyframes nutsPulse{from{opacity:.6}to{opacity:1}}';
+    document.head.appendChild(nutsStyle);
+    var nutsBtn = document.createElement('button');
+    nutsBtn.id = 'nutsBtn';
+    nutsBtn.className = 'btn';
+    nutsBtn.textContent = '🥜';
+    nutsBtn.title = 'Total nuts mode (OFF): auto-paste into the AI, keep the AI scrolled until the reply is complete, then apply the patch by itself';
+    var nutsAnchor = document.getElementById('autoPatchBtn') || payloadBtn;
+    nutsAnchor.parentNode.insertBefore(nutsBtn, nutsAnchor.nextSibling);
+    function nutsPost(on) {
+      try { window.parent.postMessage({ nutsMode: on }, '*'); } catch (e) {}
+    }
+    function nutsApply(patchText, isFinal) {
+      clearTimeout(nutsTimer);
+      toast(isFinal ? '🥜 Reply finished: applying patch…' : '🥜 Making sure the reply is complete…', 3000);
+      nutsTimer = setTimeout(function () {
+        nutsTimer = 0;
+        if (window.__NUTS !== true) return;
+        var sig = patchText.length + ':' + patchText.slice(0, 60) + ':' + patchText.slice(-60);
+        if (sig === nutsSeen) { toast('🥜 Same patch already applied, skipped', 3000); return; }
+        nutsSeen = sig;
+        applyPatch(patchText);
+      }, isFinal ? NUTS_FAST_DELAY : NUTS_SLOW_DELAY);
+    }
+    nutsBtn.addEventListener('click', function () {
+      window.__NUTS = !window.__NUTS;
+      clearTimeout(nutsTimer);
+      nutsTimer = 0;
+      nutsSeen = '';
+      nutsBtn.classList.toggle('nuts-on', window.__NUTS === true);
+      nutsBtn.title = 'Total nuts mode (' + (window.__NUTS ? 'ON' : 'OFF') + '): auto-paste into the AI, keep the AI scrolled until the reply is complete, then apply the patch by itself';
+      nutsPost(window.__NUTS === true);
+      toast(window.__NUTS ? '🥜 NUTS MODE ON: auto paste + auto patch after the full reply' : '🖐 Nuts mode OFF', 4000);
+    });
+    nutsPost(false);
+    
     function applyPatch(text) {
       var old = window.AndroidClipboard;
       window.AndroidClipboard = { read: function () { return text; } };
@@ -2395,14 +2445,15 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
       if (d && d.clipboardError === true && window.__extReadFail) { window.__extReadFail(d.why || ''); return; }
       if (d && typeof d.copyResult === 'boolean') { if (!d.copyResult) toast('❌ Extension could not copy (' + (d.why || 'blocked') + ')', 6000); return; }
       if (!d || typeof d.aiReply !== 'string') return;
-      if (window._autoIsOn && !window._autoIsOn()) return;
+      if (window.__NUTS !== true && window._autoIsOn && !window._autoIsOn()) return;
       var text = d.aiReply;
       toast('📨 AI reply received (' + text.length + ' chars, ' + (text.match(/@[\w$-]+/g) || []).length + ' tags)', 2500);
       if (window._autoRelease) window._autoRelease();
       var codes = (d.aiCode || []).filter(function (c) { return c.indexOf(SPLIT_MARK) >= 0; });
       if (codes.length || text.indexOf(SPLIT_MARK) >= 0) {
         var BLOCK_SEP = '\n' + '===' + 'BLOCK' + '===' + '\n';
-        if (window.__AUTO_APPLY_PATCH === true) applyPatch(codes.length ? codes.join(BLOCK_SEP) : text);
+        if (window.__NUTS === true) nutsApply(codes.length ? codes.join(BLOCK_SEP) : text, d.aiFinal === true);
+        else if (window.__AUTO_APPLY_PATCH === true) applyPatch(codes.length ? codes.join(BLOCK_SEP) : text);
         else toast('📋 Patch ready: click Copy on the AI reply and it applies by itself', 5000);
         return;
         }
