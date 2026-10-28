@@ -2258,7 +2258,7 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
         lastSeen = text;
         if ((!watching && !inFrame) || !text.trim()) return;
         if (text.indexOf('\u200B\u200B\u200B') >= 0 || text.indexOf('LITE MODE') >= 0 || text.indexOf('INDEX MODE') >= 0) return;
-        if (text.indexOf(SPLIT_MARK) >= 0) { if (inFrame && window.__extApplyPatch) { window.__extApplyPatch(text); return; } disarm('✅ Patch received — auto-patch finished. Press ⌘ to apply.'); return; }
+        if (text.indexOf(SPLIT_MARK) >= 0) { if (inFrame) { if (window.__AUTO_APPLY_PATCH === true && window.__extApplyPatch) window.__extApplyPatch(text); return; } disarm('✅ Patch received — auto-patch finished. Press ⌘ to apply.'); return; }
         if (text.length > 4000) return;
         var found = (text.match(/@[\w$-]+/g) || []).filter(function (t, i, a) {
           return a.indexOf(t) === i && isKnownTag(t);
@@ -2325,6 +2325,7 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
     var applyBtn = document.getElementById('pasteAndProcessBtn');
     var SPLIT_MARK = '===' + 'SPLIT' + '===';
   
+    window.__AUTO_APPLY_PATCH = false;   // false = you apply patches yourself with the ⌘ button; true = auto-apply
     window.__AI_AUTO_PASTE = false;   // false = payload is only copied and you paste it into the AI yourself; true = old auto-paste
     window.__extSend = function (text) {
       if (window.__AI_AUTO_PASTE !== true) return false;
@@ -2379,7 +2380,8 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
       var codes = (d.aiCode || []).filter(function (c) { return c.indexOf(SPLIT_MARK) >= 0; });
       if (codes.length || text.indexOf(SPLIT_MARK) >= 0) {
         var BLOCK_SEP = '\n' + '===' + 'BLOCK' + '===' + '\n';
-        applyPatch(codes.length ? codes.join(BLOCK_SEP) : text);
+        if (window.__AUTO_APPLY_PATCH === true) applyPatch(codes.length ? codes.join(BLOCK_SEP) : text);
+        else toast('📋 Patch ready: click Copy on the AI reply, then press ⌘', 5000);
         return;
         }
         if (text.length > 4000 || text.indexOf('LITE MODE') >= 0 || text.indexOf('INDEX MODE') >= 0) return;
