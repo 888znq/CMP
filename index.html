@@ -1486,6 +1486,40 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
   })();
 
   // ── Payload Button — builds prompt and copies it to clipboard ─────────
+  window.__execCopy = function (text) {
+    try {
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0;';
+      document.body.appendChild(ta);
+      ta.select();
+      var ok = document.execCommand('copy');
+      ta.remove();
+      return ok;
+    } catch (e) { return false; }
+  };
+  window.__copyText = async function (text) {
+    try { await navigator.clipboard.writeText(text); return 'api'; } catch (e1) {}
+    if (window.__execCopy(text)) return 'exec';
+    if (window.parent !== window) {
+      var ack = false;
+      var onAck = function (e) {
+        if (e.source !== window.parent || !e.data || typeof e.data.copyResult !== 'boolean') return;
+        ack = true;
+        window.removeEventListener('message', onAck);
+        if (!e.data.copyResult) toast('❌ Extension could not copy (' + (e.data.why || 'blocked') + ')', 7000);
+      };
+      window.addEventListener('message', onAck);
+      window.parent.postMessage({ copyToClipboard: String(text) }, '*');
+      setTimeout(function () {
+        if (ack) return;
+        window.removeEventListener('message', onAck);
+        toast('⚠️ Extension did not answer: apply the index.js clipboard patch and reload the extension', 7000);
+      }, 2000);
+      return 'parent';
+    }
+    throw new Error('clipboard blocked in this page');
+  };
   function liteIndex(src, instr) {
     window._liteChunks = null;
     liteSource(src, '');
@@ -2392,7 +2426,7 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
       isInternalCopy = true;
       lastClip = payload;
       var _sent = window.__extSend ? window.__extSend(payload) : false;
-            try { await navigator.clipboard.writeText(payload); } catch (cwErr) { if (!_sent && !(window.__extCopy && window.__extCopy(payload))) throw cwErr; }
+            try { await window.__copyText(payload); } catch (cwErr) { if (!_sent && !(window.__extCopy && window.__extCopy(payload))) throw cwErr; }
             window._payloadSeq = (window._payloadSeq || 0) + 1;
       setTimeout(() => { isInternalCopy = false; }, 1500);
       toast(_idx ? "🧭 Index copied (no code) — paste to Claude, copy its reply — auto-patch does the rest" : "🚀 Payload Copied! Paste it into Claude.");
@@ -2400,7 +2434,7 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
       if (_idx && window._autoArm) window._autoArm(instruction);
       else if (!_hasTags && window._autoRelease) window._autoRelease();
       document.getElementById('statusLeft').textContent = '🚀 Payload copied — paste into Claude, then Copy its reply';
-    } catch (err) { toast("❌ Failed to copy payload"); }
+    } catch (err) { toast("❌ Failed to copy payload: " + ((err && (err.name + ': ' + err.message)) || err), 7000); }
   });
 
   // ── Paste & Process button — reads clipboard and applies the patch immediately ──
