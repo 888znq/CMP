@@ -1462,7 +1462,11 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
                 } else {
                   toast('🥜 Auto-fix unavailable: not running inside the extension pane', 6000);
                 }
-              } catch (e) { toast('⚠️ Nuts auto-fix crashed: ' + ((e && e.message) || e), 8000); }
+              } catch (e) { window.__errCrash = true; toast('⚠️ Nuts auto-fix crashed: ' + ((e && e.message) || e), 8000); }
+                            if (!window.__errCrash && !(window._nutsErrTries > (window.__NUTS_ERR_MAX || 3))) {
+                              setTimeout(function () { $errOverlay.style.display = 'none'; }, 1000);
+                            }
+                            window.__errCrash = false;
             }
     }
   document.getElementById('errCopyBtn').addEventListener('click', async () => {
@@ -2468,6 +2472,7 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
           toast('🥜 Patch failed — sending the error to the AI (try ' + window._nutsErrTries + '/' + max + ')', 4000);
           setTimeout(function () {
             try { window.parent.postMessage({ sendToAI: report, nuts: true }, '*'); } catch (e) {}
+                        try { $errOverlay.style.display = 'none'; } catch (e2) {}
           }, 500);
         };
         window.__extCopy = function (text) {
@@ -2639,6 +2644,7 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
 
     lastClip = text;
     addToHistory(text);
+        try { $errOverlay.style.display = 'none'; } catch (e3) {}
 
     const ind = document.getElementById('bridgeIndicator');
     ind.textContent = '📋 Patching…';
