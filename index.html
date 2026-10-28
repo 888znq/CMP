@@ -619,6 +619,8 @@ html body.compact-layout #controlBar select:focus{outline:0 !important;box-shado
 </style>
 </head>
 <body class="compact-layout">
+<script>(function () { try { var par = window.parent; if (par !== window && par.document) { var pv = par.document.getElementById('preview'); if (pv && pv.contentWindow === window) { window.stop(); } } } catch (e) {} })();</script>
+<script>(function () { try { var par = window.parent; if (par !== window && par.document) { var pv = par.document.getElementById('preview'); if (pv && pv.contentWindow === window) { window.stop(); } } } catch (e) {} })();</script>
 
 <div id="bridgeIndicator">📋 Patch: Ready</div>
 
@@ -2157,8 +2159,8 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
     var payloadBtn = document.getElementById('payloadBtn');
     if (!box || !payloadBtn) return;
     var SPLIT_MARK = '===' + 'SPLIT' + '===';
-    var on = true;
-    var inFrame = true;   // always armed, also in a normal browser tab (⚡ button = manual mode)
+    var on = (window.parent !== window) || !!(window.AndroidClipboard && typeof window.AndroidClipboard.read === 'function');
+        var inFrame = true; on = (window.parent !== window) || !!(window.AndroidClipboard && typeof window.AndroidClipboard.read === 'function'); on = (window.parent !== window) || !!(window.AndroidClipboard && typeof window.AndroidClipboard.read === 'function');
     window.__extApplyPatch = function (t) {   // the extension replaces this one; in a plain tab this one is used
       var ab = document.getElementById('pasteAndProcessBtn'), old = window.AndroidClipboard;
       window.AndroidClipboard = { read: function () { return t; } };
@@ -2176,6 +2178,8 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
       'html body.compact-layout #controlBar #autoPatchBtn.ap-armed{background:#FFD700 !important;}' +
       'html body.compact-layout #controlBar #autoPatchBtn.ap-watch{background:#FFD700 !important;animation:apPulse 1.1s ease-in-out infinite alternate;}' +
       '@keyframes apPulse{from{opacity:.55}to{opacity:1}}' +
+            'html body.compact-layout.ap-auto #controlBar #bottom-controls #pasteAndProcessBtn,html body.compact-layout.ap-auto #pasteAndProcessBtn,html body.compact-layout.ap-auto #controlBar button[title^="Read clipboard now"]{display:none !important;}' +
+            'html body.compact-layout.ap-auto #controlBar #bottom-controls #pasteAndProcessBtn,html body.compact-layout.ap-auto #pasteAndProcessBtn,html body.compact-layout.ap-auto #controlBar button[title^="Read clipboard now"]{display:none !important;}' +
       'html body.compact-layout #controlBar #aiInstruction.ap-watch::placeholder{color:#000432 !important;-webkit-text-fill-color:#000432 !important;opacity:1 !important;font-weight:800 !important;}';
     document.head.appendChild(css);
 
@@ -2183,10 +2187,19 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
     btn.id = 'autoPatchBtn';
     btn.className = 'btn';
     btn.textContent = '⚡';
-    payloadBtn.parentNode.insertBefore(btn, payloadBtn.nextSibling);
+        payloadBtn.parentNode.insertBefore(btn, payloadBtn.nextSibling);
+        var apPasteBtn = document.getElementById('pasteAndProcessBtn');
+        if (apPasteBtn && on) { apPasteBtn.style.setProperty('display', 'none', 'important'); }
 
     function paintBtn() {
-      var w = watching && !inFrame;
+          var apPasteEl = document.getElementById('pasteAndProcessBtn');
+          if (apPasteEl) {
+            if (on) { apPasteEl.style.setProperty('display', 'none', 'important'); }
+            else { apPasteEl.style.removeProperty('display'); }
+          }
+          document.body.classList.toggle('ap-auto', !!on);
+                    document.body.classList.toggle('ap-auto', !!on);
+                              var w = watching && !inFrame;
       if (inFrame && on && !timer) startTimer();
       btn.classList.toggle('ap-on', on && !w && !inFrame);
       btn.classList.toggle('ap-armed', on && inFrame);
