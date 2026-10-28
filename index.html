@@ -1447,7 +1447,11 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
   const $errOverlay = document.getElementById('errOverlay');
   const $errBody    = document.getElementById('errBody');
   var _lastErrMsg   = '';
-  function showErr(msg) { _lastErrMsg = msg; $errBody.textContent = msg; $errOverlay.style.display = 'block'; }
+  function showErr(msg) {
+      _lastErrMsg = msg; $errBody.textContent = msg; $errOverlay.style.display = 'block';
+      // nuts mode: send the error straight back to the AI so it can fix the patch
+      if (window.__NUTS === true && window.__nutsSendError) { try { window.__nutsSendError(msg); } catch (e) {} }
+    }
   document.getElementById('errCopyBtn').addEventListener('click', async () => {
     try {
       const report = `PATCH ERROR — please fix and resend the patch.\n\nError: ${_lastErrMsg}`;
@@ -2377,7 +2381,8 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
     var nutsSeen = '';
     var nutsOrigSend = window.__extSend;
     window.__extSend = function (text) {
-      if (window.__NUTS !== true) return nutsOrigSend ? nutsOrigSend(text) : false;
+      window._nutsErrTries = 0;   // a fresh request from you resets the auto-fix counter
+            if (window.__NUTS !== true) return nutsOrigSend ? nutsOrigSend(text) : false;
       nutsSeen = '';
       try { window.parent.postMessage({ sendToAI: String(text).replace(/\u200B/g, ''), nuts: true }, '*'); return true; }
       catch (e) { return false; }
@@ -2430,7 +2435,29 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
       if (patchText) nutsApply(patchText, d.aiFinal === true);
     });
     nutsPost(false);
-    window.__extCopy = function (text) {
+    // ── NUTS MODE: auto-send patch errors back to the AI ──
+        window.__NUTS_ERR_MAX = 3;
+        window.__nutsSendError = function (msg) {
+          var max = window.__NUTS_ERR_MAX || 3;
+          window._nutsErrTries = (window._nutsErrTries || 0) + 1;
+          nutsSeen = '';   // so a corrected (or identical) patch is not skipped as "already applied"
+          if (window._nutsErrTries > max) {
+            toast('🥜 Auto-fix stopped after ' + max + ' failed tries — fix it by hand (📋 Copy Error)', 8000);
+            return;
+          }
+          var S = '===' + 'SPLIT' + '===';
+          var report = 'PATCH ERROR — your last patch was not fully applied. ' +
+            'If it had several blocks, the ones before the failing block ARE already applied.\n\nError: ' + msg;
+          if (/^(Chunk not found|Ambiguous|Low confidence)/.test(msg) && window._failOld && sourceContent) {
+            try { report += '\n\nCURRENT CODE (copy the OLD text from here exactly):\n\n' + liteSource(sourceContent, window._failOld); } catch (e) {}
+          }
+          report += '\n\nFix it and resend ONLY the failed block and any blocks after it, in the same combined format (OLD' + S + 'NEW inside one code block). Code blocks only.';
+          toast('🥜 Patch failed — sending the error to the AI (try ' + window._nutsErrTries + '/' + max + ')', 4000);
+          setTimeout(function () {
+            try { window.parent.postMessage({ sendToAI: report, nuts: true }, '*'); } catch (e) {}
+          }, 500);
+        };
+        window.__extCopy = function (text) {
       try { window.parent.postMessage({ copyToClipboard: String(text) }, '*'); return true; }
       catch (e) { return false; }
     };
@@ -2635,6 +2662,7 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
     ind.textContent = '📋 Patch: Ready';
     ind.className = allOk ? 'active' : '';
         if (allOk && window._autoRearm) window._autoRearm();
+                if (allOk) window._nutsErrTries = 0;
     if (allOk) {
       document.getElementById('statusLeft').textContent = `✨ Patch applied @ ${new Date().toLocaleTimeString()}`;
       if (blocks.length > 1) toast(`⚡ ${blocks.length} patches applied!`);
@@ -2882,6 +2910,7 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
 
   // ── Apply Patch ───────────────────────────────────────────────────────
   async function autoLockAndApply(parsed) {
+      window._failOld = parsed.oldCode;
     if (!sourceContent) return false;
     const loc = findFingerprintedChunk(sourceContent, parsed.oldCode);
     if (!loc) { showErr(`Chunk not found in source.\n\nThe patch's OLD block didn't match anything:\n"${parsed.oldCode.slice(0,120).trim()}${parsed.oldCode.length>120?'…':''}"`); return false; }
