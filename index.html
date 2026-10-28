@@ -2146,6 +2146,7 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
 
     function paintBtn() {
       var w = watching && !inFrame;
+      if (inFrame && on && !timer) startTimer();
       btn.classList.toggle('ap-on', on && !w && !inFrame);
       btn.classList.toggle('ap-armed', on && inFrame);
       btn.classList.toggle('ap-watch', on && w);
@@ -2162,7 +2163,7 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
         if (window.AndroidClipboard && typeof window.AndroidClipboard.read === 'function') {
           return Promise.resolve(window.AndroidClipboard.read());
         }
-        return navigator.clipboard.readText();
+        return (inFrame && window.__extRead) ? window.__extRead() : navigator.clipboard.readText();
       } catch (e1) { return Promise.reject(e1); }
     }
 
@@ -2175,8 +2176,8 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
       });
     }
 
-    function stopTimer() { if (timer) { clearInterval(timer); timer = null; } }
-    function startTimer() { stopTimer(); timer = setInterval(check, 700); }
+    function stopTimer() { if (inFrame && on) return; if (timer) { clearInterval(timer); timer = null; } }
+    function startTimer() { if (timer) return; timer = setInterval(check, 700); }
 
     function disarm(msg) {
       watching = false;
@@ -2212,12 +2213,13 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
       // clipboard check also runs inside the extension: copy @parts or a patch, then tap this pane
             if (!on || (!watching && !inFrame) || busy || reading || !sourceContent) return;
       var bridge = !!(window.AndroidClipboard && typeof window.AndroidClipboard.read === 'function');
-      if (!bridge && !document.hasFocus()) return;
+      if (!bridge && !inFrame && !document.hasFocus()) return;
       reading = true;
             setTimeout(function () { reading = false; }, 3000);
             readClip().then(function (text) {
         reading = false;
         text = text || '';
+        if (lastSeen === null && inFrame && !window.__apPrimed) { window.__apPrimed = true; lastSeen = text; return; }
         if (text === lastSeen) return;
         lastSeen = text;
         if ((!watching && !inFrame) || !text.trim()) return;
@@ -2230,7 +2232,10 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
         if (!found.length) return;
         if (!request) request = text.replace(/@[\w$-]+/g, ' ').replace(/\s+/g, ' ').trim();
                 fire(found);
-      }, function () { reading = false; });
+      }, function (err) {
+        reading = false;
+        if (!document.hidden && Date.now() - (window.__apWarnAt || 0) > 15000) { window.__apWarnAt = Date.now(); toast('⚠️ Clipboard read failed: ' + ((err && err.message) || 'blocked'), 6000); }
+      });
     }
 
     window._autoArm = function (req) {
@@ -2304,6 +2309,21 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
     }
   
     window.__extApplyPatch = function (t) { applyPatch(t); };
+    window.__extCopy = function (text) {
+      try { window.parent.postMessage({ copyToClipboard: String(text) }, '*'); return true; }
+      catch (e) { return false; }
+    };
+    var _readOk = null, _readNo = null;
+    window.__extRead = function () {
+      return new Promise(function (resolve, reject) {
+        var t = setTimeout(function () { _readOk = null; _readNo = null; reject(new Error('timeout')); }, 2000);
+        _readOk = function (txt) { clearTimeout(t); _readOk = null; _readNo = null; resolve(txt); };
+        _readNo = function (why) { clearTimeout(t); _readOk = null; _readNo = null; reject(new Error(why || 'denied')); };
+        try { window.parent.postMessage({ readClipboard: true }, '*'); } catch (e) { clearTimeout(t); reject(e); }
+      });
+    };
+    window.__extReadDone = function (txt) { if (_readOk) _readOk(txt); };
+    window.__extReadFail = function (why) { if (_readNo) _readNo(why); };
     function applyPatch(text) {
       var old = window.AndroidClipboard;
       window.AndroidClipboard = { read: function () { return text; } };
@@ -2314,6 +2334,9 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
     window.addEventListener('message', function (e) {
       if (e.source !== window.parent) return;
       var d = e.data;
+      if (d && typeof d.clipboardText === 'string' && window.__extReadDone) { window.__extReadDone(d.clipboardText); return; }
+      if (d && d.clipboardError === true && window.__extReadFail) { window.__extReadFail(d.why || ''); return; }
+      if (d && typeof d.copyResult === 'boolean') { if (!d.copyResult) toast('❌ Extension could not copy (' + (d.why || 'blocked') + ')', 6000); return; }
       if (!d || typeof d.aiReply !== 'string') return;
       if (window._autoIsOn && !window._autoIsOn()) return;
       var text = d.aiReply;
@@ -2369,7 +2392,7 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
       isInternalCopy = true;
       lastClip = payload;
       var _sent = window.__extSend ? window.__extSend(payload) : false;
-            try { await navigator.clipboard.writeText(payload); } catch (cwErr) { if (!_sent) throw cwErr; }
+            try { await navigator.clipboard.writeText(payload); } catch (cwErr) { if (!_sent && !(window.__extCopy && window.__extCopy(payload))) throw cwErr; }
             window._payloadSeq = (window._payloadSeq || 0) + 1;
       setTimeout(() => { isInternalCopy = false; }, 1500);
       toast(_idx ? "🧭 Index copied (no code) — paste to Claude, copy its reply — auto-patch does the rest" : "🚀 Payload Copied! Paste it into Claude.");
