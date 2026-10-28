@@ -2360,12 +2360,69 @@ pmSig = '';
       box.value = (box.value.trim() + ' ' + add.join(' ')).trim();
       toast("📎 Auto-added " + add.length + " tag(s) from clipboard");
     } catch (err) {}
-  }
-  
-  // ── Auto-payload: tapping any input box with @part tags on the clipboard builds + copies the payload ──
+      }
+      /*
+      ') >= 0 || clipText.indexOf('LITE MODE') >= 0 || clipText.indexOf('INDEX MODE') >= 0) return;
+          var foundTags = clipText.match(/@[\w$-]+/g) || [];
+          if (!foundTags.length) return;
+          if (!window._liteChunks) liteSource(sourceContent, '');
+          var knownTags = {};
+          (window._liteChunks || []).forEach(function (ch) {
+            knownTags['part' + ch.n] = 1;
+            knownTags['p' + ch.n] = 1;
+            ch.names.forEach(function (x) { knownTags[x.toLowerCase()] = 1; });
+          });
+          var instrBox = document.getElementById('aiInstruction');
+          var haveTags = (instrBox.value.match(/@[\w$-]+/g) || []).map(function (x) { return x.toLowerCase(); });
+          var freshTags = foundTags.filter(function (tg, i) {
+            return foundTags.indexOf(tg) === i && knownTags[tg.slice(1).toLowerCase()] === 1 && haveTags.indexOf(tg.toLowerCase()) < 0;
+          });
+          if (!freshTags.length) return;
+          lastAuto = clipText;
+          document.getElementById('payloadBtn').click();
+        } catch (err) {
+        } finally {
+          setTimeout(function () { busy = false; }, 800);
+        }
+      }, true);
+    })();
+  ===SPLIT===
+    */
+    // ── Auto-payload: pasting into the instruction box (or tapping any input with @part tags on the clipboard) builds + copies the payload ──
     (function initAutoTagPayload() {
       var lastAuto = '';
       var busy = false;
+      function isKnownTag(tag) {
+        var key = tag.slice(1).toLowerCase();
+        if (/^(part|p)\d+$/.test(key)) return true;
+        if (!window._liteChunks && sourceContent) liteSource(sourceContent, '');
+        var hit = false;
+        (window._liteChunks || []).forEach(function (ch) {
+          if (ch.names.some(function (x) { return x.toLowerCase() === key; })) hit = true;
+        });
+        return hit;
+      }
+      function fireFromBox() {
+        if (busy || !sourceContent) return;
+        var box = document.getElementById('aiInstruction');
+        var tags = (box.value.match(/@[\w$-]+/g) || []).filter(isKnownTag);
+        if (!tags.length) return;
+        busy = true;
+        toast("🧩 Tags detected — building payload");
+        document.getElementById('payloadBtn').click();
+        setTimeout(function () { busy = false; }, 1000);
+      }
+      document.addEventListener('paste', function (e) {
+        var t = e.target;
+        if (!t || t.id !== 'aiInstruction') return;
+        setTimeout(fireFromBox, 80);
+      }, true);
+      document.addEventListener('input', function (e) {
+        var t = e.target;
+        if (!t || t.id !== 'aiInstruction') return;
+        if (e.inputType !== 'insertFromPaste' && e.inputType !== 'insertFromDrop') return;
+        setTimeout(fireFromBox, 80);
+      }, true);
       document.addEventListener('focusin', async function (e) {
         var t = e.target;
         if (busy || !t || !t.tagName) return;
@@ -2383,6 +2440,25 @@ pmSig = '';
           }
           if (!clipText || clipText === lastAuto || clipText === lastClip || clipText.length > 4000) return;
           if (clipText.indexOf('===SPLIT===') >= 0 || clipText.indexOf('LITE MODE') >= 0 || clipText.indexOf('INDEX MODE') >= 0) return;
+          var foundTags = clipText.match(/@[\w$-]+/g) || [];
+          if (!foundTags.length) return;
+          var instrBox = document.getElementById('aiInstruction');
+          var haveTags = (instrBox.value.match(/@[\w$-]+/g) || []).map(function (x) { return x.toLowerCase(); });
+          var freshTags = foundTags.filter(function (tg, i) {
+            return foundTags.indexOf(tg) === i && isKnownTag(tg) && haveTags.indexOf(tg.toLowerCase()) < 0;
+          });
+          if (!freshTags.length) return;
+          lastAuto = clipText;
+          instrBox.value = (instrBox.value.trim() + ' ' + freshTags.join(' ')).trim();
+                    toast("🧩 Tags detected — building payload");
+                    document.getElementById('payloadBtn').click();
+                  } catch (err) {
+                  } finally {
+                    setTimeout(function () { busy = false; }, 800);
+                  }
+                }, true);
+              })();
+          /*===SPLIT===') >= 0 || clipText.indexOf('LITE MODE') >= 0 || clipText.indexOf('INDEX MODE') >= 0) return;
           var foundTags = clipText.match(/@[\w$-]+/g) || [];
           if (!foundTags.length) return;
           if (!window._liteChunks) liteSource(sourceContent, '');
@@ -2407,6 +2483,7 @@ pmSig = '';
       }, true);
     })();
   
+    */
     document.getElementById('tagsBtn').addEventListener('click', async function () {
       var text = '';
     try {
