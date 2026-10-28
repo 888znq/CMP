@@ -2258,7 +2258,7 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
         lastSeen = text;
         if ((!watching && !inFrame) || !text.trim()) return;
         if (text.indexOf('\u200B\u200B\u200B') >= 0 || text.indexOf('LITE MODE') >= 0 || text.indexOf('INDEX MODE') >= 0) return;
-        if (text.indexOf(SPLIT_MARK) >= 0) { if (inFrame) { if (window.__AUTO_APPLY_PATCH === true && window.__extApplyPatch) window.__extApplyPatch(text); return; } disarm('✅ Patch received — auto-patch finished. Press ⌘ to apply.'); return; }
+        if (text.indexOf(SPLIT_MARK) >= 0) { if (inFrame) { if (window.__CLIP_AUTO_APPLY !== false && window.__extApplyPatch) window.__extApplyPatch(text); return; } disarm('✅ Patch received — auto-patch finished. Press ⌘ to apply.'); return; }
         if (text.length > 4000) return;
         var found = (text.match(/@[\w$-]+/g) || []).filter(function (t, i, a) {
           return a.indexOf(t) === i && isKnownTag(t);
@@ -2268,7 +2268,7 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
                 fire(found);
       }, function (err) {
         reading = false;
-        if (!document.hidden && Date.now() - (window.__apWarnAt || 0) > 15000) { window.__apWarnAt = Date.now(); toast('⚠️ Clipboard read failed: ' + ((err && err.message) || 'blocked'), 6000); }
+        if (!document.hidden && !/not focused/i.test(String((err && err.message) || '')) && Date.now() - (window.__apWarnAt || 0) > 15000) { window.__apWarnAt = Date.now(); toast('⚠️ Clipboard read failed: ' + ((err && err.message) || 'blocked'), 6000); }
       });
     }
 
@@ -2381,7 +2381,7 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
       if (codes.length || text.indexOf(SPLIT_MARK) >= 0) {
         var BLOCK_SEP = '\n' + '===' + 'BLOCK' + '===' + '\n';
         if (window.__AUTO_APPLY_PATCH === true) applyPatch(codes.length ? codes.join(BLOCK_SEP) : text);
-        else toast('📋 Patch ready: click Copy on the AI reply, then press ⌘', 5000);
+        else toast('📋 Patch ready: click Copy on the AI reply and it applies by itself', 5000);
         return;
         }
         if (text.length > 4000 || text.indexOf('LITE MODE') >= 0 || text.indexOf('INDEX MODE') >= 0) return;
