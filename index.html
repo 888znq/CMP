@@ -2505,8 +2505,110 @@ pmSig = '';
     toast("📎 Added " + add.length + " tag(s) — press ▲");
   });
   
-  document.getElementById('payloadBtn').addEventListener('click', async () => {
-    await autoAddTagsFromClipboard();
+  // ── @patch mode: after the index payload, the input bar becomes a one-tap @patch button ──
+    (function initPatcher() {
+      var box = document.getElementById('aiInstruction');
+      if (!box) return;
+      var armed = false, firing = false, request = '', pressTimer = null;
+      var normalPlaceholder = box.placeholder;
+  
+      var css = document.createElement('style');
+      css.textContent =
+        'html body.compact-layout #controlBar #aiInstruction.patch-armed{background:#FFD700 !important;cursor:pointer !important;font-weight:800 !important;text-align:center !important;caret-color:transparent !important;-webkit-user-select:none !important;user-select:none !important;}' +
+        'html body.compact-layout #controlBar #aiInstruction.patch-armed::placeholder{color:#000432 !important;-webkit-text-fill-color:#000432 !important;opacity:1 !important;font-weight:800 !important;}';
+      document.head.appendChild(css);
+  
+      function isKnownTag(tag) {
+        var key = tag.slice(1).toLowerCase();
+        if (key === 'auto' || /^(part|p)\d+$/.test(key)) return true;
+        if (!window._liteChunks && sourceContent) liteSource(sourceContent, '');
+        return (window._liteChunks || []).some(function (ch) {
+          return ch.names.some(function (x) { return x.toLowerCase() === key; });
+        });
+      }
+  
+      function setArmed(on, req) {
+        armed = on;
+        if (on) {
+          request = req || '';
+          box.value = '';
+          box.readOnly = true;
+          box.placeholder = '📎 @patch';
+          box.classList.add('patch-armed');
+          box.blur();
+        } else {
+          request = '';
+          box.readOnly = false;
+          box.placeholder = normalPlaceholder;
+          box.classList.remove('patch-armed');
+        }
+      }
+  
+      window._patcherArm = function (req) { firing = false; setArmed(true, req); };
+      window._patcherFinish = function () {
+        if (!firing) return;
+        firing = false;
+        box.value = '';
+        setArmed(false);
+      };
+  
+      function readClip() {
+        if (window.AndroidClipboard && typeof window.AndroidClipboard.read === 'function') {
+          return Promise.resolve(window.AndroidClipboard.read());
+        }
+        return navigator.clipboard.readText();
+      }
+  
+      box.addEventListener('click', function () {
+        if (!armed || firing) return;
+        readClip().then(function (text) {
+          text = text || '';
+          if (text.indexOf('INDEX MODE') >= 0 || text.indexOf('LITE MODE') >= 0 || text.indexOf('===SPLIT===') >= 0) {
+            toast("ℹ Copy Claude's reply first, then tap @patch");
+            return;
+          }
+          var found = (text.match(/@[\w$-]+/g) || []).filter(function (t, i, a) {
+            return a.indexOf(t) === i && isKnownTag(t);
+          });
+          if (!found.length) { toast("ℹ No @parts in clipboard — copy Claude's reply first"); return; }
+          firing = true;
+          box.value = (request + ' ' + found.join(' ')).trim();
+          toast("🧩 Patching with " + found.length + " part(s)");
+          document.getElementById('payloadBtn').click();
+          setTimeout(function () {
+            if (firing) { firing = false; box.value = ''; }
+          }, 8000);
+        }, function () { toast("❌ Couldn't read clipboard"); });
+      });
+  
+      box.addEventListener('pointerdown', function () {
+        if (!armed) return;
+        clearTimeout(pressTimer);
+        pressTimer = setTimeout(function () {
+          var req = request;
+          setArmed(false);
+          box.value = req;
+          toast("↩ @patch cancelled — request restored");
+        }, 700);
+      });
+      ['pointerup', 'pointerleave', 'pointercancel'].forEach(function (ev) {
+        box.addEventListener(ev, function () { clearTimeout(pressTimer); });
+      });
+  
+      window.addEventListener('focusin', function (e) {
+        var t = e.target;
+        if (t && t.tagName && /^(INPUT|TEXTAREA)$/i.test(t.tagName)) e.stopPropagation();
+      }, true);
+      window.addEventListener('paste', function (e) {
+        if (e.target && e.target.id === 'aiInstruction') e.stopPropagation();
+      }, true);
+      window.addEventListener('input', function (e) {
+        if (e.target && e.target.id === 'aiInstruction' && (e.inputType === 'insertFromPaste' || e.inputType === 'insertFromDrop')) e.stopPropagation();
+      }, true);
+    })();
+  
+    document.getElementById('payloadBtn').addEventListener('click', async () => {
+      await autoAddTagsFromClipboard();
     const instruction = document.getElementById('aiInstruction').value.trim();
     const wantSuper = document.getElementById('incSuperPrompt').checked;
     const wantInstr = document.getElementById('incInstructions').checked;
@@ -2539,8 +2641,10 @@ pmSig = '';
       lastClip = payload;
       await navigator.clipboard.writeText(payload);
       setTimeout(() => { isInternalCopy = false; }, 1500);
-      toast(_idx ? "🧭 Index copied (no code) — paste to Claude, copy its reply, then press ▲" : "🚀 Payload Copied! Paste it into Claude.");
-      if (_hasTags || _auto) { var _bx = document.getElementById('aiInstruction'); _bx.value = _bx.value.replace(/\s*@[\w$-]+/g, '').trim(); }
+      toast(_idx ? "🧭 Index copied (no code) — paste to Claude, copy its reply, then tap the yellow @patch bar" : "🚀 Payload Copied! Paste it into Claude.");
+            if (_hasTags || _auto) { var _bx = document.getElementById('aiInstruction'); _bx.value = _bx.value.replace(/\s*@[\w$-]+/g, '').trim(); }
+            if (_idx && window._patcherArm) window._patcherArm(instruction);
+            else if (window._patcherFinish) window._patcherFinish();
       document.getElementById('statusLeft').textContent = '🚀 Payload copied — paste into Claude, then Copy its reply';
     } catch (err) { toast("❌ Failed to copy payload"); }
   });
