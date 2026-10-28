@@ -2362,8 +2362,53 @@ pmSig = '';
     } catch (err) {}
   }
   
-  document.getElementById('tagsBtn').addEventListener('click', async function () {
-    var text = '';
+  // ── Auto-payload: tapping any input box with @part tags on the clipboard builds + copies the payload ──
+    (function initAutoTagPayload() {
+      var lastAuto = '';
+      var busy = false;
+      document.addEventListener('focusin', async function (e) {
+        var t = e.target;
+        if (busy || !t || !t.tagName) return;
+        var tn = String(t.tagName).toUpperCase();
+        if (tn !== 'INPUT' && tn !== 'TEXTAREA') return;
+        if (t.type === 'password' || t.type === 'file' || t.type === 'checkbox') return;
+        if (!sourceContent) return;
+        busy = true;
+        try {
+          var clipText = '';
+          if (window.AndroidClipboard && typeof window.AndroidClipboard.read === 'function') {
+            clipText = window.AndroidClipboard.read();
+          } else {
+            clipText = await navigator.clipboard.readText();
+          }
+          if (!clipText || clipText === lastAuto || clipText === lastClip || clipText.length > 4000) return;
+          if (clipText.indexOf('===SPLIT===') >= 0 || clipText.indexOf('LITE MODE') >= 0 || clipText.indexOf('INDEX MODE') >= 0) return;
+          var foundTags = clipText.match(/@[\w$-]+/g) || [];
+          if (!foundTags.length) return;
+          if (!window._liteChunks) liteSource(sourceContent, '');
+          var knownTags = {};
+          (window._liteChunks || []).forEach(function (ch) {
+            knownTags['part' + ch.n] = 1;
+            knownTags['p' + ch.n] = 1;
+            ch.names.forEach(function (x) { knownTags[x.toLowerCase()] = 1; });
+          });
+          var instrBox = document.getElementById('aiInstruction');
+          var haveTags = (instrBox.value.match(/@[\w$-]+/g) || []).map(function (x) { return x.toLowerCase(); });
+          var freshTags = foundTags.filter(function (tg, i) {
+            return foundTags.indexOf(tg) === i && knownTags[tg.slice(1).toLowerCase()] === 1 && haveTags.indexOf(tg.toLowerCase()) < 0;
+          });
+          if (!freshTags.length) return;
+          lastAuto = clipText;
+          document.getElementById('payloadBtn').click();
+        } catch (err) {
+        } finally {
+          setTimeout(function () { busy = false; }, 800);
+        }
+      }, true);
+    })();
+  
+    document.getElementById('tagsBtn').addEventListener('click', async function () {
+      var text = '';
     try {
       if (window.AndroidClipboard && typeof window.AndroidClipboard.read === 'function') {
         text = window.AndroidClipboard.read();
