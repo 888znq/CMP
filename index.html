@@ -4,6 +4,16 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>AI Compile - Web Edition (Manual)</title>
+<!-- AI-NOTES
+What this is: a single-file web app (HTML, CSS and JS all in this one file). It loads a file from GitHub or the device into a sandboxed preview iframe, builds a prompt payload for an AI, and applies the AI's patch replies (OLD text, a SPLIT line, NEW text; several pairs joined by BLOCK lines) back to the source.
+Layout: body has class compact-layout, which hides #bridgeIndicator, #statusBar and #shortcutBar. The final look of the bottom bar comes from the SIGPILL rules at the END of the stylesheet, all with !important. Restyle the bar there, not in the earlier #controlBar rules.
+Runtime-built UI: #shotBtn, #shotCopyBtn, #partsMapBtn, #autoPatchBtn and #nutsBtn plus the screenshot and parts-map overlays are created by script (IIFEs). They are not in the HTML markup, search the script for their ids.
+Preview: #preview is an iframe with srcdoc and sandbox allow-same-origin, so this page can read its DOM. render() puts a small error probe on the same line as the head tag, so preview line numbers equal file line numbers.
+Extension mode: when window.parent is not window, the app runs inside a browser extension pane (window.__extBridge). Nuts mode (window.__NUTS) and auto-patch only work fully there.
+Traps: the two identical window.stop() scripts at the top of body are intentional. isKnownTag exists twice (auto-patch and ext bridge) and both copies must be changed together. All localStorage keys start with aicompiler_.
+Part tags: sections are cut at comment lines made of box-drawing dashes, and @SectionName works like @partN. Part numbers change whenever code is added or removed.
+Author notes: a line comment written as slash slash, then the at-sign word ai and a colon, shows up as NOTE in the part index.
+-->
 
 <!-- ── PWA Configuration ── -->
 <link rel="manifest" href="manifest.json">
@@ -2101,9 +2111,9 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
         label = '(' + first.slice(0, 60) + ')';
       }
       var h = hitInfo[ch.n];
-      return 'PART ' + ch.n + ' L' + ch.s + '-' + ch.e + ': ' + label + (h ? '  <<MATCH: ' + h.slice(0, 4).join(', ') + '>>' : '');
+      return 'PART ' + ch.n + ' L' + ch.s + '-' + ch.e + ': ' + label + (h ? '  <<MATCH: ' + h.slice(0, 4).join(', ') + '>>' : '') + (window.__aiPartTail ? window.__aiPartTail(ch) : '');
     });
-    return '[INDEX MODE: No code is attached on purpose. The request is the text above. Reply in plain text with ONE line only: the request copied exactly, followed by @partN tags for every part you must see to write the patch (parts marked MATCH contain words from the request). Do NOT write any patch and do NOT guess the cause from names alone. Select parts so the full cause chain is visible in the next step: (1) the code that produces the behaviour in the request, (2) every function, timer, event listener or CSS rule that calls, sets, overrides, saves or restores it, (3) the boot, init or restore code that runs it at startup. Parts marked MATCH are only hints. Be generous (up to about 12 parts): a second round costs more than a few extra parts.]\n\n=== PARTS (' + chunks.length + ' total, file has ' + src.split('\n').length + ' lines) ===\n' + lines.join('\n');
+    return '[INDEX MODE: No code is attached on purpose. The request is the text above. Reply in plain text with ONE line only: the request copied exactly, followed by @partN tags for every part you must see to write the patch (parts marked MATCH contain words from the request). Do NOT write any patch and do NOT guess the cause from names alone. Select parts so the full cause chain is visible in the next step: (1) the code that produces the behaviour in the request, (2) every function, timer, event listener or CSS rule that calls, sets, overrides, saves or restores it, (3) the boot, init or restore code that runs it at startup. Parts marked MATCH are only hints. Be generous (up to about 12 parts): a second round costs more than a few extra parts.]\n\n=== PARTS (' + chunks.length + ' total, file has ' + src.split('\n').length + ' lines) ===\n' + (window.__aiLegend ? window.__aiLegend() : '') + lines.join('\n');
   }
 
   function liteSource(src, instr) {
@@ -2111,10 +2121,21 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
     if (N < 400) return src;
     var bound = new RegExp('^\\s*(<scr' + 'ipt\\b|<sty' + 'le\\b|<!' + '--|(async\\s+)?function\\s+\\w|class\\s+\\w|(const|let|var)\\s+\\w+\\s*=\\s*(async\\s*)?(function\\b|\\([^)]*\\)\\s*=>))');
     var closeTag = new RegExp('<\\/(script|style)>\\s*$');
-    var cuts = [0], st = 0, i, c;
+    var cuts = [0], st = 0, i, c, prevSec = '';
+    var secRe = new RegExp('^\\s*(?:\\/\\/|\\/\\*|<!' + '--)\\s*(?:─{2,}|={3,})\\s*(.+?)\\s*[─=\\-]*\\s*(?:\\*\\/|-' + '->)?\\s*$');
+    var secName = function (line) {
+      if (line.indexOf('──') < 0 && line.indexOf('===') < 0) return '';
+      var m = secRe.exec(line);
+      if (!m) return '';
+      var nm = m[1].replace(/\s*(?:\(|—|:| - ).*$/, '').replace(/[^A-Za-z0-9_$]+/g, ' ').trim();
+      if (!nm) return '';
+      nm = nm.split(' ').map(function (w) { return w.charAt(0).toUpperCase() + w.slice(1); }).join('').slice(0, 28);
+      if (/^\s*\/\*/.test(line)) nm += 'Css'; else if (/^\s*<!/.test(line)) nm += 'Html';
+      return nm;
+    };
     for (i = 1; i < N; i++) {
       var len = i - st;
-      if (((bound.test(L[i]) || closeTag.test(L[i - 1])) && len >= 40) || len >= 150) { cuts.push(i); st = i; }
+      if (((bound.test(L[i]) || closeTag.test(L[i - 1])) && len >= 40) || len >= 150 || (len >= 3 && secName(L[i]))) { cuts.push(i); st = i; }
     }
     var nameRe = /function\s*\*?\s*([A-Za-z_$][\w$]*)\s*\(|(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?(?:function\b|\([^)]*\)\s*=>)|id="([^"]+)"/g;
     var chunks = [];
@@ -2126,7 +2147,12 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
         var nm = m[1] || m[2] || m[3];
         if (nm && names.indexOf(nm) < 0) names.push(nm);
       }
-      chunks.push({ n: c + 1, s: s + 1, e: e, t: t, low: t.toLowerCase(), names: names });
+      var sec = '', cont = false, k;
+      for (k = s; k < s + 3 && k < e && !sec; k++) sec = secName(L[k]);
+      if (!sec && c > 0 && prevSec && !/^\s*<(script|style)\b/i.test(L[s]) && !closeTag.test(L[s - 1])) { sec = prevSec; cont = true; }
+      prevSec = sec;
+      if (sec) { k = names.indexOf(sec); if (k >= 0) names.splice(k, 1); names.unshift(sec); }
+      chunks.push({ n: c + 1, s: s + 1, e: e, t: t, low: t.toLowerCase(), names: names, sec: sec, cont: cont });
     }
     window._liteChunks = chunks;
     var tags = (instr.match(/@[\w$-]+/g) || []).map(function (x) { return x.slice(1).toLowerCase(); });
@@ -2440,6 +2466,12 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
       pmSig = '';
     }
 
+    window.__pmInfoFor = function (el) {
+      try {
+        if (!chunks.length || lastSrc !== sourceContent) loadChunks();
+        return chunks.length ? pmInfo(el) : null;
+      } catch (e) { return null; }
+    };
     var pmTimer = null;
 
     function pmSetMode(on) {
@@ -3149,6 +3181,7 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
             }
     }
 
+    if (wantSource && window.__aiExtra) { try { window.__aiExtra(_idx, instruction).forEach(function (x) { if (x) parts.push(x); }); } catch (aiEx) {} }
     if (parts.length === 0) {
       toast("⚠️ Nothing selected — check at least one box");
       return;
@@ -3395,7 +3428,7 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
       if (isCodeMode) {
         $codeView.value = src; flash(); updateStatusBar();
       } else {
-        try { $pv.srcdoc = src; } catch(e) {}
+        try { $pv.srcdoc = (window.__aiProbe ? window.__aiProbe(src) : src); } catch(e) {}
         flash(); updateStatusBar();
       }
     }, 100);
@@ -3517,6 +3550,405 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
     return true;
   }
 
+  // ── AI Context: self-describing parts, links, runtime errors, screenshot facts, session log ──
+  (function initAiContext() {
+    var base = null, known = {}, pendingPatch = false, patchAt = 0, errsNow = [], errsAt = 0;
+    var SPLIT = '===' + 'SPLIT' + '===';
+  
+    function getChunks() {
+      window._liteChunks = null;
+      liteSource(sourceContent || '', '');
+      return window._liteChunks || [];
+    }
+    function validBase() { return !!base && base.repo === (window._loadedRepo || ''); }
+    function lineBag(src) {
+      var bag = Object.create(null);
+      src.split('\n').forEach(function (l) { var k = l.trim(); if (k) bag[k] = (bag[k] || 0) + 1; });
+      return bag;
+    }
+    function brief(el) {
+      var cl = (typeof el.className === 'string' ? el.className : '').trim().split(/\s+/).filter(Boolean).slice(0, 2);
+      return el.tagName.toLowerCase() + (el.id ? '#' + el.id : '') + (cl.length ? '.' + cl.join('.') : '');
+    }
+    function ownText(el) {
+      return Array.prototype.filter.call(el.childNodes, function (n) { return n.nodeType === 3; })
+        .map(function (n) { return n.nodeValue; }).join(' ').replace(/\s+/g, ' ').trim();
+    }
+  
+    // links between parts: which part calls functions defined in other parts
+    function ensureLinks(chunks) {
+      if (!chunks || chunks._lk) return chunks;
+      chunks._lk = 1;
+      var defRe = /function\s*\*?\s*([A-Za-z_$][\w$]*)\s*\(|(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?(?:function\b|\([^)]*\)\s*=>)|window\.([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?function\b/g;
+      var callRe = /([A-Za-z_$][\w$]*)\s*\(/g;
+      var defs = {}, m, nm, d;
+      chunks.forEach(function (ch) {
+        ch.calls = []; ch.by = [];
+        defRe.lastIndex = 0;
+        while ((m = defRe.exec(ch.t))) {
+          nm = m[1] || m[2] || m[3];
+          if (!nm || nm.length < 4) continue;
+          d = defs[nm] || (defs[nm] = { ns: [], sig: '' });
+          if (d.ns.indexOf(ch.n) < 0) d.ns.push(ch.n);
+          if (!d.sig) {
+            var a = ch.t.lastIndexOf('\n', m.index) + 1, b = ch.t.indexOf('\n', m.index);
+            d.sig = ch.t.slice(a, b < 0 ? ch.t.length : b).trim().slice(0, 110);
+          }
+        }
+      });
+      chunks.forEach(function (ch) {
+        var seen = {};
+        callRe.lastIndex = 0;
+        while ((m = callRe.exec(ch.t))) {
+          nm = m[1];
+          d = Object.prototype.hasOwnProperty.call(defs, nm) ? defs[nm] : null;
+          if (!d || d.ns.length !== 1 || d.ns[0] === ch.n || seen[nm]) continue;
+          seen[nm] = 1;
+          ch.calls.push({ name: nm, n: d.ns[0], sig: d.sig });
+          var tgt = chunks[d.ns[0] - 1];
+          if (tgt && tgt.by.indexOf(ch.n) < 0) tgt.by.push(ch.n);
+        }
+      });
+      chunks.forEach(function (ch) { ch.by.sort(function (x, y) { return x - y; }); });
+      return chunks;
+    }
+  
+    // which parts differ from the file as it was loaded
+    function markChanged(chunks) {
+      if (!chunks || chunks._ch || !validBase()) return;
+      chunks._ch = 1;
+      var bag = Object.create(null);
+      Object.keys(base.bag).forEach(function (k) { bag[k] = base.bag[k]; });
+      chunks.forEach(function (ch) {
+        var add = 0;
+        ch.t.split('\n').forEach(function (l) {
+          var x = l.trim();
+          if (!x) return;
+          if (bag[x] > 0) bag[x]--; else add++;
+        });
+        ch.added = add;
+      });
+    }
+  
+    // one-line author notes inside the code
+    function chunkNotes(ch) {
+      if (ch.ai === undefined) {
+        ch.ai = '';
+        if (ch.t.indexOf('@ai:') >= 0) {
+          var re = /(?:\/\/|\/\*)\s*@ai:\s*([^\n*]+)/g, m, out = [];
+          while ((m = re.exec(ch.t)) && out.length < 3) out.push(m[1].trim().slice(0, 110));
+          ch.ai = out.join(' / ');
+        }
+      }
+      return ch.ai;
+    }
+  
+    // runtime errors reported by the probe inside the preview
+    function aiProbeFn() {
+      try {
+        var E = window.__aiErrs = [];
+        var add = function (k, m, l, c) {
+          if (E.length >= 20) return;
+          var lc = window.__aiClick;
+          E.push({ k: k, m: String(m).slice(0, 300), l: l | 0, c: c | 0, a: lc ? lc.d : '', ad: lc ? Date.now() - lc.t : 0 });
+        };
+        window.addEventListener('error', function (e) {
+          if (e && e.target && e.target !== window) return;
+          add('error', e && e.message, e && e.lineno, e && e.colno);
+        });
+        window.addEventListener('unhandledrejection', function (e) {
+          var r = e && e.reason;
+          add('promise', (r && r.message) || r, 0, 0);
+        });
+        var ce = console.error;
+        console.error = function () {
+          try {
+            add('console.error', Array.prototype.map.call(arguments, function (a) { return a && a.message ? a.message : String(a); }).join(' '), 0, 0);
+          } catch (x) {}
+          return ce.apply(console, arguments);
+        };
+        document.addEventListener('click', function (e) {
+          var t = e.target;
+          if (!t || !t.tagName) return;
+          var x = (t.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 20);
+          window.__aiClick = { d: t.tagName.toLowerCase() + (t.id ? '#' + t.id : '') + (x ? ' "' + x + '"' : ''), t: Date.now() };
+        }, true);
+      } catch (z) {}
+    }
+    var PROBE = '<scr' + 'ipt>(' + aiProbeFn.toString().replace(/\s*\n\s*/g, ' ') + ')();</scr' + 'ipt>';
+    // injected on the same line as <head>, so preview line numbers equal file line numbers
+    window.__aiProbe = function (src) {
+      try {
+        var m = /<head(\s[^>]*)?>/i.exec(src);
+        if (!m) return src;
+        var at = m.index + m[0].length;
+        return src.slice(0, at) + PROBE + src.slice(at);
+      } catch (e) { return src; }
+    };
+    function readErrs() {
+      try {
+        var w = document.getElementById('preview').contentWindow;
+        return (w && w.__aiErrs) ? Array.prototype.slice.call(w.__aiErrs) : [];
+      } catch (e) { return []; }
+    }
+    function partAt(line, chunks) {
+      var k;
+      if (!line) return '';
+      for (k = 0; k < chunks.length; k++) {
+        if (line >= chunks[k].s && line <= chunks[k].e) return '@part' + chunks[k].n + (chunks[k].sec ? ' @' + chunks[k].sec : '');
+      }
+      return '';
+    }
+    function fmtErr(e, chunks) {
+      var w = partAt(e.l, chunks);
+      return e.m + (e.l ? '  @ L' + e.l + (e.c ? ':' + e.c : '') : '  (no line, ' + e.k + ')') + (w ? '  (' + w + ')' : '') +
+        (e.a ? '  after clicking ' + e.a + ' ' + (e.ad / 1000).toFixed(1) + 's earlier' : '');
+    }
+    function sig(e) { return e.k + ':' + e.m; }
+    function reportFresh(fresh) {
+      var chunks = getChunks();
+      var txt = fresh.slice(0, 5).map(function (e) { return fmtErr(e, chunks); }).join('\n');
+      toast('⚠️ New preview error after the patch (' + fresh.length + ') — it is added to the next payload', 6000);
+      if (window.__NUTS !== true || window.parent === window) return;
+      var max = window.__NUTS_ERR_MAX || 3;
+      window._nutsErrTries = (window._nutsErrTries || 0) + 1;
+      if (window._nutsErrTries > max) { toast('🥜 Auto-fix stopped after ' + max + ' tries — the preview still throws', 8000); return; }
+      var first = fresh[0], hit = null, k;
+      for (k = 0; k < chunks.length; k++) { if (first.l && first.l >= chunks[k].s && first.l <= chunks[k].e) { hit = chunks[k]; break; } }
+      var report = 'RUNTIME ERROR after your last patch: the patch applied, but the preview now throws.\n\n' + txt + '\n\n';
+      try { if (hit) report += 'CODE AROUND THE ERROR:\n\n' + liteSource(sourceContent, '@part' + hit.n) + '\n\n'; } catch (e1) {}
+      report += 'Find the cause and resend a corrected patch in the same combined format (OLD' + SPLIT + 'NEW inside one code block). Code blocks only, plus at most one plain sentence before them naming the confirmed cause.';
+      toast('🥜 Preview error after the patch — sending it to the AI (try ' + window._nutsErrTries + '/' + max + ')', 4000);
+      setTimeout(function () { try { window.parent.postMessage({ sendToAI: report, nuts: true }, '*'); } catch (e2) {} }, 500);
+    }
+    var pvEl = document.getElementById('preview');
+    if (pvEl) pvEl.addEventListener('load', function () {
+      var loadAt = Date.now();
+      setTimeout(function () {
+        var list = readErrs();
+        errsNow = list; errsAt = Date.now();
+        var fresh = list.filter(function (e) { return !known[sig(e)]; });
+        list.forEach(function (e) { known[sig(e)] = 1; });
+        if (pendingPatch && loadAt >= patchAt) { pendingPatch = false; if (fresh.length) reportFresh(fresh); }
+      }, 1500);
+    });
+  
+    // session log: baseline when the first patch lands, one line per applied patch
+    var _push0 = pushState;
+    pushState = function () {
+      try {
+        var repo = window._loadedRepo || '';
+        if (sourceContent && (!base || base.repo !== repo || !undoStack.length)) {
+          base = { repo: repo, src: sourceContent, cur: sourceContent, bag: lineBag(sourceContent), log: [] };
+        }
+      } catch (e) {}
+      return _push0.apply(this, arguments);
+    };
+    function describePatch(a, b, parsed) {
+      var A = a.split('\n'), B = b.split('\n'), i = 0, k, where = '';
+      while (i < A.length && i < B.length && A[i] === B[i]) i++;
+      var chunks = getChunks();
+      for (k = 0; k < chunks.length; k++) {
+        if (i + 1 >= chunks[k].s && i + 1 <= chunks[k].e) { where = ' ' + '@part' + chunks[k].n + (chunks[k].sec ? ' @' + chunks[k].sec : ''); break; }
+      }
+      var d = B.length - A.length;
+      var first = (parsed.newCode || '').split('\n').filter(function (x) { return x.trim(); })[0] || '(code removed)';
+      return new Date().toTimeString().slice(0, 5) + ' L' + (i + 1) + where + ' (' + (d >= 0 ? '+' : '') + d + ' lines): ' + first.trim().slice(0, 70);
+    }
+    var _apply0 = autoLockAndApply;
+    autoLockAndApply = async function (parsed) {
+      var before = sourceContent;
+      var ok = await _apply0(parsed);
+      try {
+        if (ok && base && sourceContent !== before) {
+          base.log.push(describePatch(before, sourceContent, parsed));
+          if (base.log.length > 8) base.log.shift();
+          base.cur = sourceContent;
+          pendingPatch = true;
+          patchAt = Date.now();
+        }
+      } catch (e) {}
+      return ok;
+    };
+  
+    // tail added to every line of the index
+    window.__aiPartTail = function (ch) {
+      var chunks = window._liteChunks, s = '';
+      try {
+        ensureLinks(chunks);
+        markChanged(chunks);
+        if (Date.now() - errsAt > 500) { errsNow = readErrs(); errsAt = Date.now(); }
+        if (validBase() && ch.added) s += '  <<CHANGED +' + ch.added + '>>';
+        var er = errsNow.filter(function (e) { return e.l >= ch.s && e.l <= ch.e; })[0];
+        if (er) s += '  <<ERROR: L' + er.l + ' ' + er.m.slice(0, 60) + '>>';
+        if (ch.calls && ch.calls.length) s += '  | calls: ' + ch.calls.slice(0, 5).map(function (x) { return x.name + '(' + x.n + ')'; }).join(', ');
+        if (ch.by && ch.by.length) s += '  | used by: ' + ch.by.slice(0, 6).join(', ');
+        var nt = chunkNotes(ch);
+        if (nt) s += '  | NOTE: ' + nt;
+      } catch (e) {}
+      return s;
+    };
+    window.__aiLegend = function () {
+      return 'LEGEND (end of each part line): <<MATCH>> = words from the request were found in it; <<CHANGED +n>> = n lines differ from the file as loaded, so it was patched this session; <<ERROR>> = a runtime error in the preview maps to this part; calls = functions defined in OTHER parts that this part calls, as name(part number); used by = parts that call something defined here; NOTE = author note written in the code. The first name of each part is its section name: you may tag @SectionName instead of @partN (parts sharing a name are all selected). Links are heuristic, based on names.\n';
+    };
+  
+    // extra context blocks added after the code in the payload
+    var notesRe = new RegExp('<!' + '--\\s*AI-NOTES([\\s\\S]*?)-' + '->');
+    function uiMap() {
+      var pv = document.getElementById('preview');
+      if (!pv || !pv.offsetWidth || isCodeMode) return '';
+      var pd, win;
+      try { pd = pv.contentDocument; win = pv.contentWindow; } catch (e) { return ''; }
+      if (!pd || !pd.body || !win) return '';
+      var list = pd.body.querySelectorAll('*'), out = [], i, el, r, cs, t, info, more = false;
+      var tagOk = /^(BUTTON|INPUT|SELECT|TEXTAREA|A|CANVAS|H1|H2|H3)$/;
+      for (i = 0; i < list.length && i < 4000; i++) {
+        el = list[i];
+        if (!(el.id || tagOk.test(el.tagName))) continue;
+        if (el.closest && el.closest('svg')) continue;
+        r = el.getBoundingClientRect();
+        if (r.width < 4 || r.height < 4) continue;
+        cs = win.getComputedStyle(el);
+        if (cs.display === 'none' || cs.visibility === 'hidden') continue;
+        if (r.bottom < 0 || r.top > win.innerHeight || r.right < 0 || r.left > win.innerWidth) continue;
+        if (out.length >= 40) { more = true; break; }
+        t = el.children.length ? '' : (el.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 28);
+        if (!t) t = (el.getAttribute('placeholder') || el.title || '').slice(0, 28);
+        info = window.__pmInfoFor ? window.__pmInfoFor(el) : null;
+        out.push('  ' + brief(el) + (t ? ' "' + t + '"' : '') + '  (' + Math.round(r.left) + ',' + Math.round(r.top) + ' ' + Math.round(r.width) + 'x' + Math.round(r.height) + ')' +
+          (info && info.parts && info.parts.length ? '  ' + info.parts.map(function (p) { return '@part' + p.n + (p.css ? '(css)' : ''); }).join(' ') : ''));
+      }
+      if (!out.length) return '';
+      return '=== UI MAP (visible elements in the preview, viewport ' + win.innerWidth + 'x' + win.innerHeight + ', (x,y w x h) in px, @partN = where its markup / css lives)' + (more ? ', first 40 shown' : '') + ' ===\n' + out.join('\n');
+    }
+    function connBlock(instruction, chunks) {
+      var tags = (instruction.match(/@[\w$-]+/g) || []).map(function (x) { return x.slice(1).toLowerCase(); });
+      if (!tags.length) return '';
+      var shown = chunks.filter(function (ch) {
+        return tags.indexOf('part' + ch.n) >= 0 || tags.indexOf('p' + ch.n) >= 0 || ch.names.some(function (x) { return tags.indexOf(x.toLowerCase()) >= 0; });
+      }).slice(0, 8);
+      if (!shown.length) return '';
+      ensureLinks(chunks);
+      var lines = [];
+      shown.forEach(function (ch) {
+        var l = [], nt = chunkNotes(ch);
+        if (ch.calls.length) l.push('  calls: ' + ch.calls.slice(0, 6).map(function (x) { return x.name + ' (PART ' + x.n + ') ' + x.sig; }).join('\n         '));
+        if (ch.by.length) l.push('  used by: PART ' + ch.by.slice(0, 8).join(', PART '));
+        if (nt) l.push('  note: ' + nt);
+        if (l.length) lines.push('PART ' + ch.n + (ch.sec ? ' @' + ch.sec : '') + ':\n' + l.join('\n'));
+      });
+      if (!lines.length) return '';
+      return '=== CONNECTIONS OF THE SHOWN PARTS (heuristic, from names; a call shows only the signature line of the callee, ask for its @partN if you need the body) ===\n' + lines.join('\n');
+    }
+    window.__aiExtra = function (isIdx, instruction) {
+      var out = [], m, chunks;
+      try {
+        m = notesRe.exec(sourceContent || '');
+        if (m && m[1].trim()) out.push('=== AI-NOTES (written by the author inside the file, treat as true) ===\n' + m[1].trim());
+      } catch (e1) {}
+      try {
+        if (validBase() && base.log.length) {
+          out.push('=== SESSION CHANGES (patches applied since this file was loaded' + (base.cur !== sourceContent ? '; the file was edited or undone after the last one' : '') + ') ===\n' + base.log.join('\n'));
+        }
+      } catch (e2) {}
+      try {
+        var errs = readErrs();
+        errsNow = errs; errsAt = Date.now();
+        if (errs.length) {
+          chunks = getChunks();
+          out.push('=== RUNTIME ERRORS IN THE PREVIEW (line numbers are file lines) ===\n' + errs.slice(0, 6).map(function (e) { return fmtErr(e, chunks); }).join('\n'));
+        }
+      } catch (e3) {}
+      try { if (isIdx) { var ui = uiMap(); if (ui) out.push(ui); } } catch (e4) {}
+      try {
+        if (!isIdx && sourceContent && sourceContent.split('\n').length >= 400) {
+          var cb = connBlock(instruction || '', getChunks());
+          if (cb) out.push(cb);
+        }
+      } catch (e5) {}
+      return out;
+    };
+  
+    // screenshot facts: computed styles, what covers each element, and its parts
+    function factsFor(bx, pv) {
+      var pd = pv.contentDocument, win = pv.contentWindow;
+      var all = pd.body ? pd.body.querySelectorAll('*') : [];
+      var skip = /^(SCRIPT|STYLE|LINK|META|BR|NOSCRIPT|HTML|HEAD|BODY)$/;
+      var tagOk = /^(BUTTON|INPUT|SELECT|TEXTAREA|A|LABEL|CANVAS|IMG|SVG)$/;
+      var cand = [], tags = [], cssTags = [];
+      bx.forEach(function (b) {
+        var i, el, r, ix, iy;
+        for (i = 0; i < all.length && i < 5000; i++) {
+          el = all[i];
+          var tn = el.tagName.toUpperCase();
+          if (skip.test(tn)) continue;
+          r = el.getBoundingClientRect();
+          if (r.width < 2 || r.height < 2) continue;
+          ix = Math.min(b.x + b.w, r.right) - Math.max(b.x, r.left);
+          iy = Math.min(b.y + b.h, r.bottom) - Math.max(b.y, r.top);
+          if (ix <= 0 || iy <= 0 || (ix * iy) / (r.width * r.height) < 0.5) continue;
+          if (!(el.id || tagOk.test(tn) || ownText(el))) continue;
+          if (cand.indexOf(el) < 0) cand.push(el);
+        }
+      });
+      function rank(el) { return (el.id ? 2 : 0) + (tagOk.test(el.tagName.toUpperCase()) ? 1 : 0); }
+      cand = cand.map(function (el, i) { return { el: el, i: i }; })
+        .sort(function (p, q) { return (rank(q.el) - rank(p.el)) || (p.i - q.i); })
+        .slice(0, 8).map(function (p) { return p.el; });
+      var lines = cand.map(function (el, k) {
+        var r = el.getBoundingClientRect(), cs = win.getComputedStyle(el), top = null, cover;
+        var cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+        if (cx < 0 || cy < 0 || cx > win.innerWidth || cy > win.innerHeight) cover = 'center is outside the viewport';
+        else {
+          try { top = pd.elementFromPoint(cx, cy); } catch (e) {}
+          if (!top) cover = 'nothing';
+          else if (top === el || el.contains(top)) cover = 'the element itself (clickable)';
+          else cover = brief(top) + '  <-- NOT this element: it covers or intercepts it';
+        }
+        var info = window.__pmInfoFor ? window.__pmInfoFor(el) : null, pt = '';
+        if (info && info.parts) {
+          pt = info.parts.map(function (p) {
+            var t = '@part' + p.n;
+            if (p.css) { if (cssTags.indexOf(t) < 0) cssTags.push(t); } else if (tags.indexOf(t) < 0) tags.push(t);
+            return t + (p.css ? '(css)' : '(markup)');
+          }).join(' ');
+        }
+        var tx = ownText(el).slice(0, 30), html = '';
+        try { html = el.cloneNode(false).outerHTML.slice(0, 170); } catch (e2) {}
+        return (k + 1) + '. ' + brief(el) + (tx ? ' "' + tx + '"' : '') + '  ' + Math.round(r.width) + 'x' + Math.round(r.height) + ' at (' + Math.round(r.left) + ',' + Math.round(r.top) + ')' +
+          '\n   style: display:' + cs.display + ' position:' + cs.position + ' z-index:' + cs.zIndex + ' overflow:' + cs.overflow + ' visibility:' + cs.visibility + ' opacity:' + cs.opacity + ' pointer-events:' + cs.pointerEvents +
+          '\n   on top at its center: ' + cover + (pt ? '\n   code: ' + pt : '') + '\n   tag: ' + html;
+      });
+      var text = '[SCREENSHOT FACTS: viewport ' + win.innerWidth + 'x' + win.innerHeight + ' px, pixel ratio ' + win.devicePixelRatio + '. Boxes: ' +
+        bx.map(function (b, i) { return (i + 1) + '=(' + Math.round(b.x) + ',' + Math.round(b.y) + ' ' + Math.round(b.w) + 'x' + Math.round(b.h) + ')'; }).join(' ') +
+        '. Elements under the boxes, with the code part of their markup and their css:\n' + (lines.length ? lines.join('\n') : '(none detected)') + ']';
+      return { text: text, tags: tags.concat(cssTags) };
+    }
+    var shotBar = document.getElementById('shotBar');
+    if (shotBar) shotBar.addEventListener('click', function (ev) {
+      var a = ev.target && ev.target.getAttribute ? ev.target.getAttribute('data-a') : null;
+      if (a !== 'done') return;
+      try {
+        var ovl = document.getElementById('shotOverlay'), pv = document.getElementById('preview');
+        var bx = Array.prototype.map.call(ovl.children, function (d) {
+          return { x: parseFloat(d.style.left) || 0, y: parseFloat(d.style.top) || 0, w: parseFloat(d.style.width) || 0, h: parseFloat(d.style.height) || 0 };
+        });
+        if (!bx.length) return;
+        var ins = document.getElementById('aiInstruction'), before = ins ? ins.value : '';
+        var facts = factsFor(bx, pv);
+        setTimeout(function () {
+          if (!window.__shotInfo) return;
+          window.__shotInfo += '\n' + facts.text;
+          if (!ins) return;
+          var had = (before.match(/@[\w$-]+/g) || []).map(function (x) { return x.toLowerCase(); });
+          var added = (ins.value.match(/@part\d+/gi) || []).filter(function (t) { return had.indexOf(t.toLowerCase()) < 0; });
+          var keep = (facts.tags.length ? facts.tags : added).slice(0, 4).filter(function (t) { return had.indexOf(t.toLowerCase()) < 0; });
+          ins.value = (before.trim() + ' ' + keep.join(' ')).trim();
+        }, 0);
+      } catch (e) {}
+    }, true);
+  })();
+  
   // ── Shortcut Bar ──────────────────────────────────────────────────────
   var scShortcuts = [];
   var scLocked    = false;
