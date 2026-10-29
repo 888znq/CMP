@@ -1737,6 +1737,44 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
       btn.addEventListener('click', function () { if (isOpen) closeShot(); else openShot(); });
     })();
     
+      (function initShotCopy() {
+        var sb = document.getElementById('shotBtn');
+        if (!sb || !sb.parentNode || document.getElementById('shotCopyBtn')) return;
+        var cb = document.createElement('button');
+        cb.id = 'shotCopyBtn';
+        cb.className = 'btn';
+        cb.style.cssText = 'display:none;border-color:#ffffff;color:#ffffff;';
+        cb.title = 'Copy the marked screenshot, then paste it into the AI after the text';
+        cb.textContent = '🖼';
+        sb.parentNode.insertBefore(cb, sb.nextSibling);
+        var baseClear = window.__shotClear;
+        window.__shotClear = function () {
+          if (baseClear) baseClear();
+          cb.style.display = 'none';
+          cb.style.background = '';
+          cb.style.color = '#ffffff';
+        };
+        window.__shotPending = function () {
+          window.__shotInfo = '';
+          sb.style.background = '';
+          sb.style.color = '#ffffff';
+          cb.style.display = '';
+          cb.style.background = '#FFD700';
+          cb.style.color = '#000432';
+          setTimeout(function () { toast('📋 Text copied: paste it in the AI, then press 🖼 and paste the image', 8000); }, 80);
+        };
+        cb.addEventListener('click', async function () {
+          if (!window.__shotBlob) { cb.style.display = 'none'; toast('⚠️ No screenshot pending'); return; }
+          try {
+            try { isInternalCopy = true; } catch (e1) {}
+            await navigator.clipboard.write([new ClipboardItem({ 'image/png': window.__shotBlob })]);
+            setTimeout(function () { try { isInternalCopy = false; } catch (e2) {} }, 1500);
+            window.__shotClear();
+            toast('🖼 Image copied: paste it into the AI now', 5000);
+          } catch (e3) { toast('❌ Could not copy image: ' + ((e3 && e3.message) || e3), 6000); }
+        });
+      })();
+      
       /* duplicate screenshot copy disabled
       // ── Screenshot region: draw boxes on the preview; tags the code parts under them and attaches the image to the next payload ──
     (function initShot() {
@@ -3100,6 +3138,15 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
     if (wantSource) {
       var liteBox = document.getElementById('incLite');
       parts.push(_idx ? liteIndex(sourceContent, instruction) : (sourceContent ? ((liteBox && liteBox.checked) ? liteSource(sourceContent, instruction) : sourceContent) : "(No source loaded)"));
+            if (window.__shotInfo && !_idx && liteBox && liteBox.checked && sourceContent && window._liteChunks && sourceContent.split('\n').length >= 400) {
+              var _shown = (instruction.match(/@part(\d+)/gi) || []).map(function (x) { return x.slice(5); });
+              parts.push('=== ALL PARTS OF THE FILE (the code of the marked parts is shown above; if you need more code to do the task, reply in plain text with ONLY the @partN tags you need and no patch) ===\n' +
+                window._liteChunks.map(function (ch) {
+                  var lb = ch.names.slice(0, 8).join(', ');
+                  if (!lb) lb = '(' + (ch.t.split('\n').map(function (z) { return z.trim(); }).filter(Boolean)[0] || '').slice(0, 60) + ')';
+                  return 'PART ' + ch.n + ' L' + ch.s + '-' + ch.e + ': ' + lb + (_shown.indexOf(String(ch.n)) >= 0 ? '  <<SHOWN>>' : '');
+                }).join('\n'));
+            }
     }
 
     if (parts.length === 0) {
@@ -3116,14 +3163,16 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
       lastClip = payload;
       var _sent = window.__extSend ? window.__extSend(payload) : false;
             window.__shotUsed = false;
-                  if (window.__shotBlob && window.ClipboardItem && navigator.clipboard && navigator.clipboard.write) {
+                  if (_sent && window.__shotBlob && window.ClipboardItem && navigator.clipboard && navigator.clipboard.write) {
                     try {
-                      await navigator.clipboard.write([new ClipboardItem({ 'text/plain': new Blob([payload], { type: 'text/plain' }), 'image/png': window.__shotBlob })]);
+                      await navigator.clipboard.write([new ClipboardItem({ 'image/png': window.__shotBlob })]);
                       window.__shotUsed = true;
-                    } catch (shErr) { toast('⚠️ Could not copy image + text together, copied text only', 5000); }
+                    } catch (shErr) { toast('⚠️ Could not copy the image, copied text only', 5000); }
                   }
                   if (!window.__shotUsed) { try { await window.__copyText(payload); } catch (cwErr) { if (!_sent && !(window.__extCopy && window.__extCopy(payload))) throw cwErr; } }
-                  if (window.__shotClear && (window.__shotBlob || window.__shotInfo)) window.__shotClear();
+                  if (window.__shotUsed) { if (window.__shotClear) window.__shotClear(); }
+                        else if (window.__shotBlob && window.__shotPending) window.__shotPending();
+                        else if (window.__shotClear && window.__shotInfo) window.__shotClear();
             window._payloadSeq = (window._payloadSeq || 0) + 1;
       setTimeout(() => { isInternalCopy = false; }, 1500);
       toast(_idx ? "🧭 Index copied (no code) — paste to Claude, copy its reply — auto-patch does the rest" : "🚀 Payload Copied! Paste it into Claude.");
