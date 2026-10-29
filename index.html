@@ -681,7 +681,7 @@ html body.compact-layout #controlBar #shotBtn{background:#cdb4ff;}
   </div>
   <div id="bottom-controls">
     <button id="repoVisBtn" title="Choose which repos show in the bottom bar">&#x1F441;</button>
-    <input type="text" id="aiInstruction" class="btn" style="border-color:#ffffff;color:#ffffff;" placeholder="Instructions for AI...">
+    <input type="text" id="aiInstruction" class="btn" style="border-color:#ffffff;color:#ffffff;" placeholder="Instructions for AI..." autocomplete="off" autocapitalize="off" spellcheck="false" data-lpignore="true" data-1p-ignore="true">
     <div id="payloadToggles">
       <label title="Include the base system prompt"><input type="checkbox" id="incSuperPrompt" checked></label>
       <label title="Include your typed instructions"><input type="checkbox" id="incInstructions" checked></label>
@@ -730,7 +730,7 @@ html body.compact-layout #controlBar #shotBtn{background:#cdb4ff;}
   <h4>🐙 GitHub Integration</h4>
   <div class="gh-row">
     <label>Token</label>
-    <input type="password" id="ghToken" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx">
+    <input type="password" id="ghToken" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx" autocomplete="new-password">
   </div>
   <div class="gh-hint">Personal Access Token with <strong>repo</strong> scope. Stored locally only.</div>
   <div class="gh-row">
