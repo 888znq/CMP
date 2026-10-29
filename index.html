@@ -1736,8 +1736,9 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
       });
       btn.addEventListener('click', function () { if (isOpen) closeShot(); else openShot(); });
     })();
-  
-    // ── Screenshot region: draw boxes on the preview; tags the code parts under them and attaches the image to the next payload ──
+    
+      /* duplicate screenshot copy disabled
+      // ── Screenshot region: draw boxes on the preview; tags the code parts under them and attaches the image to the next payload ──
     (function initShot() {
       var anchor = document.getElementById('payloadBtn');
       var $ins = document.getElementById('aiInstruction');
@@ -1974,8 +1975,9 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
       });
       btn.addEventListener('click', function () { if (isOpen) closeShot(); else openShot(); });
     })();
-
-  // ── AST Panel ─────────────────────────────────────────────────────────
+      */
+    
+      // ── AST Panel ─────────────────────────────────────────────────────────
   const $astPanel   = document.getElementById('astPanel');
   const $astContent = document.getElementById('astContent');
   document.getElementById('astBtn').addEventListener('click', () => {
@@ -3095,7 +3097,6 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
     if (wantSuper && !_idx) parts.push(SUPER_PROMPT);
     if (wantInstr && instruction) parts.push(instruction);
         if (window.__shotInfo) parts.push(window.__shotInfo);
-        if (window.__shotInfo) parts.push(window.__shotInfo);
     if (wantSource) {
       var liteBox = document.getElementById('incLite');
       parts.push(_idx ? liteIndex(sourceContent, instruction) : (sourceContent ? ((liteBox && liteBox.checked) ? liteSource(sourceContent, instruction) : sourceContent) : "(No source loaded)"));
@@ -3121,15 +3122,7 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
                       window.__shotUsed = true;
                     } catch (shErr) { toast('⚠️ Could not copy image + text together, copied text only', 5000); }
                   }
-                  if (!window.__shotUsed) { window.__shotUsed = false;
-                        if (window.__shotBlob && window.ClipboardItem && navigator.clipboard && navigator.clipboard.write) {
-                          try {
-                            await navigator.clipboard.write([new ClipboardItem({ 'text/plain': new Blob([payload], { type: 'text/plain' }), 'image/png': window.__shotBlob })]);
-                            window.__shotUsed = true;
-                          } catch (shErr) { toast('⚠️ Could not copy image + text together, copied text only', 5000); }
-                        }
-                        if (!window.__shotUsed) { try { await window.__copyText(payload); } catch (cwErr) { if (!_sent && !(window.__extCopy && window.__extCopy(payload))) throw cwErr; } }
-                        if (window.__shotClear && (window.__shotBlob || window.__shotInfo)) window.__shotClear(); }
+                  if (!window.__shotUsed) { try { await window.__copyText(payload); } catch (cwErr) { if (!_sent && !(window.__extCopy && window.__extCopy(payload))) throw cwErr; } }
                   if (window.__shotClear && (window.__shotBlob || window.__shotInfo)) window.__shotClear();
             window._payloadSeq = (window._payloadSeq || 0) + 1;
       setTimeout(() => { isInternalCopy = false; }, 1500);
