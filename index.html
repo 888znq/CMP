@@ -1498,6 +1498,482 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
   });
   function closeErrOverlay() { try { $errOverlay.style.display = 'none'; } catch (e) {} }
   document.getElementById('errDismissBtn').addEventListener('click', closeErrOverlay);
+  
+    // ── Screenshot region: draw boxes on the preview; tags the code parts under them and attaches the image to the next payload ──
+    (function initShot() {
+      var anchor = document.getElementById('payloadBtn');
+      var $ins = document.getElementById('aiInstruction');
+      if (!anchor || !anchor.parentNode) return;
+      var isOpen = false, boxes = [], cur = null, drawing = false, sx = 0, sy = 0;
+  
+      var btn = document.createElement('button');
+      btn.id = 'shotBtn';
+      btn.className = 'btn';
+      btn.style.cssText = 'border-color:#ffffff;color:#ffffff;';
+      btn.title = 'Screenshot: draw boxes over the preview. The code parts under them get tagged and the image is added to the next payload (▲)';
+      btn.textContent = '📷';
+      anchor.parentNode.insertBefore(btn, anchor.nextSibling);
+  
+      var ov = document.createElement('div');
+      ov.id = 'shotOverlay';
+      ov.style.cssText = 'position:fixed;z-index:700;display:none;cursor:crosshair;background:rgba(0,0,0,0.25);touch-action:none;outline:2px dashed #ffffff;';
+      var bar = document.createElement('div');
+      bar.id = 'shotBar';
+      bar.style.cssText = 'position:fixed;z-index:701;top:8px;left:50%;transform:translateX(-50%);display:none;gap:6px;align-items:center;background:rgba(0,4,50,0.97);border:1px solid #ffffff;border-radius:8px;padding:6px 10px;color:#ffffff;font:700 10px monospace;';
+      bar.innerHTML = '<span>Drag boxes over the UI</span>' +
+        '<button data-a="undo" title="Remove last box">↶</button>' +
+        '<button data-a="done" title="Capture">✓ Done</button>' +
+        '<button data-a="clear" title="Remove the attached screenshot">🗑</button>' +
+        '<button data-a="x" title="Cancel">✕</button>';
+      document.body.appendChild(ov);
+      document.body.appendChild(bar);
+      Array.prototype.forEach.call(bar.querySelectorAll('button'), function (b) {
+        b.style.cssText = 'background:rgba(0,0,0,0.5);border:1px solid #ffffff;color:#ffffff;padding:5px 10px;border-radius:6px;font:700 10px monospace;cursor:pointer;';
+      });
+  
+      function place(d, b) {
+        d.style.left = b.x + 'px'; d.style.top = b.y + 'px';
+        d.style.width = b.w + 'px'; d.style.height = b.h + 'px';
+      }
+      function mkBox(b) {
+        var d = document.createElement('div');
+        d.style.cssText = 'position:absolute;border:2px solid #ff2d2d;background:rgba(255,45,45,0.15);pointer-events:none;';
+        place(d, b);
+        ov.appendChild(d);
+        return d;
+      }
+      function clearBoxes() {
+        boxes.forEach(function (b) { if (b.el && b.el.parentNode) b.el.parentNode.removeChild(b.el); });
+        boxes = [];
+      }
+      function clearShot() {
+        window.__shotBlob = null;
+        window.__shotInfo = '';
+        btn.style.background = '';
+        btn.style.color = '#ffffff';
+      }
+      window.__shotClear = clearShot;
+      function closeShot() {
+        ov.style.display = 'none';
+        bar.style.display = 'none';
+        isOpen = false;
+        drawing = false;
+        clearBoxes();
+      }
+      function openShot() {
+        var pv = document.getElementById('preview');
+        if (!pv || !pv.offsetWidth || !pv.offsetHeight || !pv.contentDocument || !pv.contentDocument.body) { toast('⚠️ Switch to Web Preview (□) first'); return; }
+        if (!sourceContent) { toast('⚠️ Load a file first'); return; }
+        var r = pv.getBoundingClientRect();
+        ov.style.left = r.left + 'px'; ov.style.top = r.top + 'px';
+        ov.style.width = r.width + 'px'; ov.style.height = r.height + 'px';
+        clearBoxes();
+        ov.style.display = 'block';
+        bar.style.display = 'flex';
+        isOpen = true;
+      }
+  
+      ov.addEventListener('pointerdown', function (e) {
+        if (e.target !== ov) return;
+        var r = ov.getBoundingClientRect();
+        sx = e.clientX - r.left; sy = e.clientY - r.top;
+        drawing = true;
+        cur = { x: sx, y: sy, w: 0, h: 0, el: null };
+        cur.el = mkBox(cur);
+        try { ov.setPointerCapture(e.pointerId); } catch (e1) {}
+        e.preventDefault();
+      });
+      ov.addEventListener('pointermove', function (e) {
+        if (!drawing || !cur) return;
+        var r = ov.getBoundingClientRect();
+        var x = Math.max(0, Math.min(r.width, e.clientX - r.left));
+        var y = Math.max(0, Math.min(r.height, e.clientY - r.top));
+        cur.x = Math.min(sx, x); cur.y = Math.min(sy, y);
+        cur.w = Math.abs(x - sx); cur.h = Math.abs(y - sy);
+        place(cur.el, cur);
+      });
+      function endDraw() {
+        if (!drawing || !cur) return;
+        drawing = false;
+        if (cur.w < 8 || cur.h < 8) { if (cur.el.parentNode) cur.el.parentNode.removeChild(cur.el); }
+        else boxes.push(cur);
+        cur = null;
+      }
+      ov.addEventListener('pointerup', endDraw);
+      ov.addEventListener('pointercancel', endDraw);
+      document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && isOpen) closeShot(); });
+  
+      function ownText(el) {
+        return Array.prototype.filter.call(el.childNodes, function (n) { return n.nodeType === 3; })
+          .map(function (n) { return n.nodeValue; }).join(' ').replace(/\s+/g, ' ').trim();
+      }
+      function classesOf(el) {
+        return (typeof el.className === 'string' ? el.className : '').trim().split(/\s+/).filter(Boolean);
+      }
+      function descr(el) {
+        var s = el.tagName.toLowerCase(), cl = classesOf(el).slice(0, 3), t = ownText(el).slice(0, 40);
+        if (el.id) s += '#' + el.id;
+        if (cl.length) s += '.' + cl.join('.');
+        if (t) s += ' "' + t + '"';
+        return s;
+      }
+      function underBoxes(pd, bx) {
+        var out = [];
+        var all = pd.body ? pd.body.querySelectorAll('*') : [];
+        bx.forEach(function (b) {
+          var host = null, hostA = Infinity, i;
+          for (i = 0; i < all.length; i++) {
+            var el = all[i];
+            if (/^(SCRIPT|STYLE|LINK|META|BR|NOSCRIPT)$/.test(el.tagName.toUpperCase())) continue;
+            var r = el.getBoundingClientRect();
+            if (r.width < 2 || r.height < 2) continue;
+            var ix = Math.min(b.x + b.w, r.right) - Math.max(b.x, r.left);
+            var iy = Math.min(b.y + b.h, r.bottom) - Math.max(b.y, r.top);
+            if (ix <= 0 || iy <= 0) continue;
+            var ea = r.width * r.height, ia = ix * iy;
+            if (ia / ea >= 0.5) { if (out.indexOf(el) < 0) out.push(el); }
+            else if (r.left <= b.x && r.top <= b.y && r.right >= b.x + b.w && r.bottom >= b.y + b.h && ea < hostA) { host = el; hostA = ea; }
+          }
+          if (host && out.indexOf(host) < 0) out.unshift(host);
+        });
+        return out.slice(0, 30);
+      }
+      function partsFor(els) {
+        window._liteChunks = null;
+        liteSource(sourceContent, '');
+        var chunks = window._liteChunks;
+        if (!chunks) return [];
+        var limit = chunks.length * 0.25, sc = {};
+        function bump(tok, w) {
+          if (!tok || tok.length < 4) return;
+          var low = tok.toLowerCase();
+          var hit = chunks.filter(function (ch) { return ch.low.indexOf(low) >= 0; });
+          if (!hit.length || hit.length > limit) return;
+          hit.forEach(function (ch) { sc[ch.n] = (sc[ch.n] || 0) + w; });
+        }
+        els.forEach(function (el) {
+          if (el.id) bump(el.id, 3);
+          classesOf(el).slice(0, 6).forEach(function (c) { bump(c, 1); });
+          var t = ownText(el);
+          if (t.length >= 5) bump(t.slice(0, 30), 2);
+        });
+        var ranked = Object.keys(sc).map(Number).sort(function (a, b) { return sc[b] - sc[a]; });
+        var good = ranked.filter(function (n) { return sc[n] >= 3; });
+        if (!good.length) good = ranked.slice(0, 3);
+        return good.slice(0, 6).sort(function (a, b) { return a - b; });
+      }
+      function loadH2C(ok, fail) {
+        if (window.html2canvas) { ok(); return; }
+        var s = document.createElement('script');
+        s.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
+        s.onload = ok;
+        s.onerror = fail;
+        document.head.appendChild(s);
+      }
+  
+      function finish() {
+        if (!boxes.length) { toast('⚠️ Draw at least one box first'); return; }
+        var pv = document.getElementById('preview');
+        var pd = pv.contentDocument, win = pv.contentWindow;
+        var bx = boxes.map(function (b) { return { x: b.x, y: b.y, w: b.w, h: b.h }; });
+        var W = pv.clientWidth, H = pv.clientHeight;
+        var els = [];
+        try { els = underBoxes(pd, bx); } catch (e1) {}
+        var names = els.map(descr).filter(function (x, i, a) { return a.indexOf(x) === i; }).slice(0, 20);
+        var nums = [];
+        try { nums = partsFor(els); } catch (e2) {}
+        window.__shotInfo = '[SCREENSHOT CONTEXT: the attached image is a screenshot of my app preview. The red numbered box(es) mark the area I mean. DOM elements inside/under that area: ' +
+          (names.length ? names.join(' | ') : 'none detected') + (nums.length ? '. The matching code parts are included below.' : '.') + ']';
+        var added = 0;
+        if ($ins) {
+          var have = ($ins.value.match(/@[\w$-]+/g) || []).map(function (x) { return x.toLowerCase(); });
+          var add = nums.map(function (n) { return '@part' + n; }).filter(function (t) { return have.indexOf(t) < 0; });
+          added = add.length;
+          if (add.length) $ins.value = ($ins.value.trim() + ' ' + add.join(' ')).trim();
+        }
+        closeShot();
+        btn.style.background = '#FFD700';
+        btn.style.color = '#000432';
+        toast('📷 Capturing…', 2000);
+        loadH2C(function () {
+          window.html2canvas(pd.documentElement, {
+            useCORS: true, logging: false, backgroundColor: '#ffffff', scale: 1,
+            x: win.scrollX, y: win.scrollY, width: W, height: H, windowWidth: W, windowHeight: H
+          }).then(function (cv) {
+            var k = cv.width / W, g = cv.getContext('2d');
+            g.lineWidth = 3; g.strokeStyle = '#ff2d2d'; g.fillStyle = '#ff2d2d'; g.font = 'bold 16px sans-serif';
+            bx.forEach(function (b, i) {
+              g.strokeRect(b.x * k, b.y * k, b.w * k, b.h * k);
+              g.fillText(String(i + 1), b.x * k + 4, b.y * k + 16);
+            });
+            cv.toBlob(function (blob) {
+              if (!blob) { window.__shotBlob = null; toast('⚠️ Image failed — code parts and element list are still added', 5000); return; }
+              window.__shotBlob = blob;
+              toast('📷 Region captured — ' + (added ? added + ' part(s) tagged, ' : '') + 'press ▲ to copy image + text together', 5000);
+            }, 'image/png');
+          }).catch(function (err) {
+            window.__shotBlob = null;
+            toast('⚠️ Image capture failed (' + ((err && err.message) || err) + ') — code parts and element list are still added', 6000);
+          });
+        }, function () {
+          window.__shotBlob = null;
+          toast('⚠️ Could not load html2canvas — code parts and element list are still added, no image', 6000);
+        });
+      }
+  
+      bar.addEventListener('click', function (e) {
+        var a = e.target && e.target.getAttribute ? e.target.getAttribute('data-a') : null;
+        if (a === 'undo') {
+          var last = boxes.pop();
+          if (last && last.el && last.el.parentNode) last.el.parentNode.removeChild(last.el);
+        } else if (a === 'done') {
+          finish();
+        } else if (a === 'clear') {
+          clearShot(); closeShot(); toast('🗑 Screenshot removed');
+        } else if (a === 'x') {
+          closeShot();
+        }
+      });
+      btn.addEventListener('click', function () { if (isOpen) closeShot(); else openShot(); });
+    })();
+  
+    // ── Screenshot region: draw boxes on the preview; tags the code parts under them and attaches the image to the next payload ──
+    (function initShot() {
+      var anchor = document.getElementById('payloadBtn');
+      var $ins = document.getElementById('aiInstruction');
+      if (!anchor || !anchor.parentNode) return;
+      var isOpen = false, boxes = [], cur = null, drawing = false, sx = 0, sy = 0;
+  
+      var btn = document.createElement('button');
+      btn.id = 'shotBtn';
+      btn.className = 'btn';
+      btn.style.cssText = 'border-color:#ffffff;color:#ffffff;';
+      btn.title = 'Screenshot: draw boxes over the preview. The code parts under them get tagged and the image is added to the next payload (▲)';
+      btn.textContent = '📷';
+      anchor.parentNode.insertBefore(btn, anchor.nextSibling);
+  
+      var ov = document.createElement('div');
+      ov.id = 'shotOverlay';
+      ov.style.cssText = 'position:fixed;z-index:700;display:none;cursor:crosshair;background:rgba(0,0,0,0.25);touch-action:none;outline:2px dashed #ffffff;';
+      var bar = document.createElement('div');
+      bar.id = 'shotBar';
+      bar.style.cssText = 'position:fixed;z-index:701;top:8px;left:50%;transform:translateX(-50%);display:none;gap:6px;align-items:center;background:rgba(0,4,50,0.97);border:1px solid #ffffff;border-radius:8px;padding:6px 10px;color:#ffffff;font:700 10px monospace;';
+      bar.innerHTML = '<span>Drag boxes over the UI</span>' +
+        '<button data-a="undo" title="Remove last box">↶</button>' +
+        '<button data-a="done" title="Capture">✓ Done</button>' +
+        '<button data-a="clear" title="Remove the attached screenshot">🗑</button>' +
+        '<button data-a="x" title="Cancel">✕</button>';
+      document.body.appendChild(ov);
+      document.body.appendChild(bar);
+      Array.prototype.forEach.call(bar.querySelectorAll('button'), function (b) {
+        b.style.cssText = 'background:rgba(0,0,0,0.5);border:1px solid #ffffff;color:#ffffff;padding:5px 10px;border-radius:6px;font:700 10px monospace;cursor:pointer;';
+      });
+  
+      function place(d, b) {
+        d.style.left = b.x + 'px'; d.style.top = b.y + 'px';
+        d.style.width = b.w + 'px'; d.style.height = b.h + 'px';
+      }
+      function mkBox(b) {
+        var d = document.createElement('div');
+        d.style.cssText = 'position:absolute;border:2px solid #ff2d2d;background:rgba(255,45,45,0.15);pointer-events:none;';
+        place(d, b);
+        ov.appendChild(d);
+        return d;
+      }
+      function clearBoxes() {
+        boxes.forEach(function (b) { if (b.el && b.el.parentNode) b.el.parentNode.removeChild(b.el); });
+        boxes = [];
+      }
+      function clearShot() {
+        window.__shotBlob = null;
+        window.__shotInfo = '';
+        btn.style.background = '';
+        btn.style.color = '#ffffff';
+      }
+      window.__shotClear = clearShot;
+      function closeShot() {
+        ov.style.display = 'none';
+        bar.style.display = 'none';
+        isOpen = false;
+        drawing = false;
+        clearBoxes();
+      }
+      function openShot() {
+        var pv = document.getElementById('preview');
+        if (!pv || !pv.offsetWidth || !pv.offsetHeight || !pv.contentDocument || !pv.contentDocument.body) { toast('⚠️ Switch to Web Preview (□) first'); return; }
+        if (!sourceContent) { toast('⚠️ Load a file first'); return; }
+        var r = pv.getBoundingClientRect();
+        ov.style.left = r.left + 'px'; ov.style.top = r.top + 'px';
+        ov.style.width = r.width + 'px'; ov.style.height = r.height + 'px';
+        clearBoxes();
+        ov.style.display = 'block';
+        bar.style.display = 'flex';
+        isOpen = true;
+      }
+  
+      ov.addEventListener('pointerdown', function (e) {
+        if (e.target !== ov) return;
+        var r = ov.getBoundingClientRect();
+        sx = e.clientX - r.left; sy = e.clientY - r.top;
+        drawing = true;
+        cur = { x: sx, y: sy, w: 0, h: 0, el: null };
+        cur.el = mkBox(cur);
+        try { ov.setPointerCapture(e.pointerId); } catch (e1) {}
+        e.preventDefault();
+      });
+      ov.addEventListener('pointermove', function (e) {
+        if (!drawing || !cur) return;
+        var r = ov.getBoundingClientRect();
+        var x = Math.max(0, Math.min(r.width, e.clientX - r.left));
+        var y = Math.max(0, Math.min(r.height, e.clientY - r.top));
+        cur.x = Math.min(sx, x); cur.y = Math.min(sy, y);
+        cur.w = Math.abs(x - sx); cur.h = Math.abs(y - sy);
+        place(cur.el, cur);
+      });
+      function endDraw() {
+        if (!drawing || !cur) return;
+        drawing = false;
+        if (cur.w < 8 || cur.h < 8) { if (cur.el.parentNode) cur.el.parentNode.removeChild(cur.el); }
+        else boxes.push(cur);
+        cur = null;
+      }
+      ov.addEventListener('pointerup', endDraw);
+      ov.addEventListener('pointercancel', endDraw);
+      document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && isOpen) closeShot(); });
+  
+      function ownText(el) {
+        return Array.prototype.filter.call(el.childNodes, function (n) { return n.nodeType === 3; })
+          .map(function (n) { return n.nodeValue; }).join(' ').replace(/\s+/g, ' ').trim();
+      }
+      function classesOf(el) {
+        return (typeof el.className === 'string' ? el.className : '').trim().split(/\s+/).filter(Boolean);
+      }
+      function descr(el) {
+        var s = el.tagName.toLowerCase(), cl = classesOf(el).slice(0, 3), t = ownText(el).slice(0, 40);
+        if (el.id) s += '#' + el.id;
+        if (cl.length) s += '.' + cl.join('.');
+        if (t) s += ' "' + t + '"';
+        return s;
+      }
+      function underBoxes(pd, bx) {
+        var out = [];
+        var all = pd.body ? pd.body.querySelectorAll('*') : [];
+        bx.forEach(function (b) {
+          var host = null, hostA = Infinity, i;
+          for (i = 0; i < all.length; i++) {
+            var el = all[i];
+            if (/^(SCRIPT|STYLE|LINK|META|BR|NOSCRIPT)$/.test(el.tagName.toUpperCase())) continue;
+            var r = el.getBoundingClientRect();
+            if (r.width < 2 || r.height < 2) continue;
+            var ix = Math.min(b.x + b.w, r.right) - Math.max(b.x, r.left);
+            var iy = Math.min(b.y + b.h, r.bottom) - Math.max(b.y, r.top);
+            if (ix <= 0 || iy <= 0) continue;
+            var ea = r.width * r.height, ia = ix * iy;
+            if (ia / ea >= 0.5) { if (out.indexOf(el) < 0) out.push(el); }
+            else if (r.left <= b.x && r.top <= b.y && r.right >= b.x + b.w && r.bottom >= b.y + b.h && ea < hostA) { host = el; hostA = ea; }
+          }
+          if (host && out.indexOf(host) < 0) out.unshift(host);
+        });
+        return out.slice(0, 30);
+      }
+      function partsFor(els) {
+        window._liteChunks = null;
+        liteSource(sourceContent, '');
+        var chunks = window._liteChunks;
+        if (!chunks) return [];
+        var limit = chunks.length * 0.25, sc = {};
+        function bump(tok, w) {
+          if (!tok || tok.length < 4) return;
+          var low = tok.toLowerCase();
+          var hit = chunks.filter(function (ch) { return ch.low.indexOf(low) >= 0; });
+          if (!hit.length || hit.length > limit) return;
+          hit.forEach(function (ch) { sc[ch.n] = (sc[ch.n] || 0) + w; });
+        }
+        els.forEach(function (el) {
+          if (el.id) bump(el.id, 3);
+          classesOf(el).slice(0, 6).forEach(function (c) { bump(c, 1); });
+          var t = ownText(el);
+          if (t.length >= 5) bump(t.slice(0, 30), 2);
+        });
+        var ranked = Object.keys(sc).map(Number).sort(function (a, b) { return sc[b] - sc[a]; });
+        var good = ranked.filter(function (n) { return sc[n] >= 3; });
+        if (!good.length) good = ranked.slice(0, 3);
+        return good.slice(0, 6).sort(function (a, b) { return a - b; });
+      }
+      function loadH2C(ok, fail) {
+        if (window.html2canvas) { ok(); return; }
+        var s = document.createElement('script');
+        s.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
+        s.onload = ok;
+        s.onerror = fail;
+        document.head.appendChild(s);
+      }
+  
+      function finish() {
+        if (!boxes.length) { toast('⚠️ Draw at least one box first'); return; }
+        var pv = document.getElementById('preview');
+        var pd = pv.contentDocument, win = pv.contentWindow;
+        var bx = boxes.map(function (b) { return { x: b.x, y: b.y, w: b.w, h: b.h }; });
+        var W = pv.clientWidth, H = pv.clientHeight;
+        var els = [];
+        try { els = underBoxes(pd, bx); } catch (e1) {}
+        var names = els.map(descr).filter(function (x, i, a) { return a.indexOf(x) === i; }).slice(0, 20);
+        var nums = [];
+        try { nums = partsFor(els); } catch (e2) {}
+        window.__shotInfo = '[SCREENSHOT CONTEXT: the attached image is a screenshot of my app preview. The red numbered box(es) mark the area I mean. DOM elements inside/under that area: ' +
+          (names.length ? names.join(' | ') : 'none detected') + (nums.length ? '. The matching code parts are included below.' : '.') + ']';
+        var added = 0;
+        if ($ins) {
+          var have = ($ins.value.match(/@[\w$-]+/g) || []).map(function (x) { return x.toLowerCase(); });
+          var add = nums.map(function (n) { return '@part' + n; }).filter(function (t) { return have.indexOf(t) < 0; });
+          added = add.length;
+          if (add.length) $ins.value = ($ins.value.trim() + ' ' + add.join(' ')).trim();
+        }
+        closeShot();
+        btn.style.background = '#FFD700';
+        btn.style.color = '#000432';
+        toast('📷 Capturing…', 2000);
+        loadH2C(function () {
+          window.html2canvas(pd.documentElement, {
+            useCORS: true, logging: false, backgroundColor: '#ffffff', scale: 1,
+            x: win.scrollX, y: win.scrollY, width: W, height: H, windowWidth: W, windowHeight: H
+          }).then(function (cv) {
+            var k = cv.width / W, g = cv.getContext('2d');
+            g.lineWidth = 3; g.strokeStyle = '#ff2d2d'; g.fillStyle = '#ff2d2d'; g.font = 'bold 16px sans-serif';
+            bx.forEach(function (b, i) {
+              g.strokeRect(b.x * k, b.y * k, b.w * k, b.h * k);
+              g.fillText(String(i + 1), b.x * k + 4, b.y * k + 16);
+            });
+            cv.toBlob(function (blob) {
+              if (!blob) { window.__shotBlob = null; toast('⚠️ Image failed — code parts and element list are still added', 5000); return; }
+              window.__shotBlob = blob;
+              toast('📷 Region captured — ' + (added ? added + ' part(s) tagged, ' : '') + 'press ▲ to copy image + text together', 5000);
+            }, 'image/png');
+          }).catch(function (err) {
+            window.__shotBlob = null;
+            toast('⚠️ Image capture failed (' + ((err && err.message) || err) + ') — code parts and element list are still added', 6000);
+          });
+        }, function () {
+          window.__shotBlob = null;
+          toast('⚠️ Could not load html2canvas — code parts and element list are still added, no image', 6000);
+        });
+      }
+  
+      bar.addEventListener('click', function (e) {
+        var a = e.target && e.target.getAttribute ? e.target.getAttribute('data-a') : null;
+        if (a === 'undo') {
+          var last = boxes.pop();
+          if (last && last.el && last.el.parentNode) last.el.parentNode.removeChild(last.el);
+        } else if (a === 'done') {
+          finish();
+        } else if (a === 'clear') {
+          clearShot(); closeShot(); toast('🗑 Screenshot removed');
+        } else if (a === 'x') {
+          closeShot();
+        }
+      });
+      btn.addEventListener('click', function () { if (isOpen) closeShot(); else openShot(); });
+    })();
 
   // ── AST Panel ─────────────────────────────────────────────────────────
   const $astPanel   = document.getElementById('astPanel');
@@ -2618,6 +3094,8 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
     var _idx = !!(wantSource && wantInstr && instruction && _lb && _lb.checked && sourceContent && sourceContent.split('\n').length >= 400 && !_hasTags && !_auto);
     if (wantSuper && !_idx) parts.push(SUPER_PROMPT);
     if (wantInstr && instruction) parts.push(instruction);
+        if (window.__shotInfo) parts.push(window.__shotInfo);
+        if (window.__shotInfo) parts.push(window.__shotInfo);
     if (wantSource) {
       var liteBox = document.getElementById('incLite');
       parts.push(_idx ? liteIndex(sourceContent, instruction) : (sourceContent ? ((liteBox && liteBox.checked) ? liteSource(sourceContent, instruction) : sourceContent) : "(No source loaded)"));
@@ -2636,7 +3114,23 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
       isInternalCopy = true;
       lastClip = payload;
       var _sent = window.__extSend ? window.__extSend(payload) : false;
-            try { await window.__copyText(payload); } catch (cwErr) { if (!_sent && !(window.__extCopy && window.__extCopy(payload))) throw cwErr; }
+            window.__shotUsed = false;
+                  if (window.__shotBlob && window.ClipboardItem && navigator.clipboard && navigator.clipboard.write) {
+                    try {
+                      await navigator.clipboard.write([new ClipboardItem({ 'text/plain': new Blob([payload], { type: 'text/plain' }), 'image/png': window.__shotBlob })]);
+                      window.__shotUsed = true;
+                    } catch (shErr) { toast('⚠️ Could not copy image + text together, copied text only', 5000); }
+                  }
+                  if (!window.__shotUsed) { window.__shotUsed = false;
+                        if (window.__shotBlob && window.ClipboardItem && navigator.clipboard && navigator.clipboard.write) {
+                          try {
+                            await navigator.clipboard.write([new ClipboardItem({ 'text/plain': new Blob([payload], { type: 'text/plain' }), 'image/png': window.__shotBlob })]);
+                            window.__shotUsed = true;
+                          } catch (shErr) { toast('⚠️ Could not copy image + text together, copied text only', 5000); }
+                        }
+                        if (!window.__shotUsed) { try { await window.__copyText(payload); } catch (cwErr) { if (!_sent && !(window.__extCopy && window.__extCopy(payload))) throw cwErr; } }
+                        if (window.__shotClear && (window.__shotBlob || window.__shotInfo)) window.__shotClear(); }
+                  if (window.__shotClear && (window.__shotBlob || window.__shotInfo)) window.__shotClear();
             window._payloadSeq = (window._payloadSeq || 0) + 1;
       setTimeout(() => { isInternalCopy = false; }, 1500);
       toast(_idx ? "🧭 Index copied (no code) — paste to Claude, copy its reply — auto-patch does the rest" : "🚀 Payload Copied! Paste it into Claude.");
