@@ -1367,8 +1367,9 @@ Scenario 9 (The Link Shift): Changing where the app connects to (APIs, URLs, or 
 Scenario 10 (The Sync): If you change the "Brain" (Web Worker), you must also fix the "Body" (Main Script).
 Scenario 11 (The Layer Fix): Fixing UI issues where things are hidden or unclickable.
 If any variable is declared with const or let inside a function or block that gets re-executed, move the declaration outside to the top of the script or convert it to var. Never declare the same identifier twice in the same scope.
-response must contain ONLY the code blocks. No warnings, no error messages, no annotations.
+response must contain ONLY the code blocks, plus at most one plain sentence before them naming the confirmed cause. No warnings, no error messages, no annotations.
 If you have a concern about the existing code, state it in plain text BEFORE the code block — never inside it.
+ROOT-CAUSE RULE: never patch from a guess. Before any patch, trace the cause end to end: what produces the behaviour, what calls, overrides, saves or restores it, and what runs it at startup. If any link of that chain is not in the code shown, reply with ONLY the @names of the parts you need and NO patch. Once the cause is confirmed, give ONE definitive set of blocks (no alternatives, no apply-this-if options) and put one plain sentence naming the confirmed cause before the code.
 Before you give me the solution, double-check that you haven't left any brackets } or parentheses ) unclosed.
 For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLOCK=== so I can batch-apply all at once with one copy.]
 `;
@@ -1586,7 +1587,7 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
       var h = hitInfo[ch.n];
       return 'PART ' + ch.n + ' L' + ch.s + '-' + ch.e + ': ' + label + (h ? '  <<MATCH: ' + h.slice(0, 4).join(', ') + '>>' : '');
     });
-    return '[INDEX MODE: No code is attached on purpose. The request is the text above. Reply in plain text with ONE line only: the request copied exactly, followed by @partN tags for every part you must see to write the patch (parts marked MATCH contain words from the request). Pick as few parts as possible, but include every part where the edit or its dependencies live. Do not write any patch yet.]\n\n=== PARTS (' + chunks.length + ' total, file has ' + src.split('\n').length + ' lines) ===\n' + lines.join('\n');
+    return '[INDEX MODE: No code is attached on purpose. The request is the text above. Reply in plain text with ONE line only: the request copied exactly, followed by @partN tags for every part you must see to write the patch (parts marked MATCH contain words from the request). Do NOT write any patch and do NOT guess the cause from names alone. Select parts so the full cause chain is visible in the next step: (1) the code that produces the behaviour in the request, (2) every function, timer, event listener or CSS rule that calls, sets, overrides, saves or restores it, (3) the boot, init or restore code that runs it at startup. Parts marked MATCH are only hints. Be generous (up to about 12 parts): a second round costs more than a few extra parts.]\n\n=== PARTS (' + chunks.length + ' total, file has ' + src.split('\n').length + ' lines) ===\n' + lines.join('\n');
   }
 
   function liteSource(src, instr) {
@@ -1640,7 +1641,7 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
     }).slice(0, 12);
     var sel = Object.keys(forced).map(Number).concat(rank.map(function (ch) { return ch.n; }))
       .sort(function (a, b) { return a - b; });
-    var out = ['[LITE MODE: the file has ' + N + ' lines and only the relevant parts are shown below. Reply with OLD===SPLIT===NEW blocks whose OLD text is copied exactly from these parts and is unique in the whole file (include a few surrounding lines). If you need a part that is not shown, reply in plain text with only its name from the list, like @functionName.]'];
+    var out = ['[LITE MODE: the file has ' + N + ' lines and only the relevant parts are shown below. STRICT RULES: (1) Trace the cause of the request through the shown parts before writing anything: what produces the behaviour, what calls, overrides, saves or restores it, and what runs it at startup. (2) If any link of that chain is missing or you are guessing, reply in plain text with ONLY the @names you need and NO patch, not even a partial or probable one. (3) Only when the cause is confirmed from the shown code, give ONE definitive set of patch blocks, with one plain sentence before them naming the confirmed cause. Never give alternatives, optional patches, or a patch together with a request for more parts. Patch format: Reply with OLD===SPLIT===NEW blocks whose OLD text is copied exactly from these parts and is unique in the whole file (include a few surrounding lines). If you need a part that is not shown, reply in plain text with only its name from the list, like @functionName.]'];
     if (!sel.length) out.push('(No part matched the instruction. Name one with @name.)');
     sel.forEach(function (n) {
       var ch = chunks[n - 1];
@@ -2295,7 +2296,6 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
                   lastSeen = lastClip;
           setTimeout(function () {
             box.value = saved;
-            if (inFrame) { request = ''; armedTags = []; }
             busy = false;
             paintBtn();
           }, 300);
@@ -2333,8 +2333,10 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
     }
 
     window._autoArm = function (req) {
-      if (!on) return;
-      request = req || '';
+          if (!on) return;
+          request = req || '';
+          window._apReq = request;
+          window._apTags = [];
             armedTags = [];
       watching = true;
       lastSeen = null;
@@ -2346,7 +2348,9 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
     window._autoRelease = function () { if (watching) disarm(); };
         window._autoIsOn = function () { return on; };
         window._autoRearm = function () {
-          if (!on) return;
+                  if (!on) return;
+                  window._apReq = '';
+                  window._apTags = [];
           request = '';
           armedTags = [];
           watching = true;
@@ -2485,7 +2489,7 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
           if (/^(Chunk not found|Ambiguous|Low confidence)/.test(msg) && window._failOld && sourceContent) {
             try { report += '\n\nCURRENT CODE (copy the OLD text from here exactly):\n\n' + liteSource(sourceContent, window._failOld); } catch (e) {}
           }
-          report += '\n\nFix it and resend ONLY the failed block and any blocks after it, in the same combined format (OLD' + S + 'NEW inside one code block). Code blocks only.';
+          report += '\n\nFix it and resend ONLY the failed block and any blocks after it, in the same combined format (OLD' + S + 'NEW inside one code block). Code blocks only, plus at most one plain sentence before them naming the confirmed cause.';
           toast('🥜 Patch failed — sending the error to the AI (try ' + window._nutsErrTries + '/' + max + ')', 4000);
           setTimeout(function () {
             try { window.parent.postMessage({ sendToAI: report, nuts: true }, '*'); } catch (e) {}
@@ -2591,7 +2595,10 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
         });
         if (!found.length) return;
         var req = text.replace(/@[\w$-]+/g, ' ').replace(/\s+/g, ' ').trim();
-        box.value = (req + ' ' + found.join(' ')).trim();
+        if (!req) req = window._apReq || ''; else window._apReq = req;
+                window._apTags = window._apTags || [];
+                found.forEach(function (t) { if (window._apTags.indexOf(t) < 0) window._apTags.push(t); });
+                box.value = (req + ' ' + window._apTags.join(' ')).trim();
         payloadBtn.click();
         });
         })();
