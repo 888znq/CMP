@@ -801,6 +801,15 @@ html body.compact-layout #controlBar {
     width: calc(100vw - 8px) !important; height: 42px !important;
   }
   </style>
+<style>
+html:root body.compact-layout:not(#x) { background: #000432 !important; }
+html:root body.compact-layout:not(#x) #preview,
+html:root body.compact-layout:not(#x) #codeView {
+  border-radius: 0 !important;
+  box-shadow: 0 0 0 40px #000432 !important;
+}
+html:root body.compact-layout:not(#x) #controlBar { z-index: 100 !important; }
+</style>
 </head>
 <body class="compact-layout">
 <script>(function () { try { var par = window.parent; if (par !== window && par.document) { var pv = par.document.getElementById('preview'); if (pv && pv.contentWindow === window) { window.stop(); } } } catch (e) {} })();</script>
