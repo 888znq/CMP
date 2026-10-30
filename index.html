@@ -801,7 +801,12 @@ html body.compact-layout #controlBar {
     width: calc(100vw - 8px) !important; height: 42px !important;
   }
   </style>
+<script>(function(){try{var p=window.parent;if(p!==window){var pv=p.document.getElementById('preview');if(pv&&pv.contentWindow===window){document.documentElement.classList.add('in-pv');}}}catch(e){}})();</script>
 <style>
+html.in-pv:root,
+html.in-pv:root body.compact-layout:not(#x) { background: #000432 !important; clip-path: none !important; }
+html.in-pv:root body.compact-layout:not(#x)::before,
+html.in-pv:root body.compact-layout:not(#x)::after { display: none !important; content: none !important; }
 html:root body.compact-layout:not(#x) { background: #000432 !important; }
 html:root body.compact-layout:not(#x) #preview,
 html:root body.compact-layout:not(#x) #codeView {
