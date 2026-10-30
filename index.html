@@ -656,7 +656,94 @@ html body.compact-layout #controlBar #ghSettingsBtn{background:#f78fb3 !importan
 html body.compact-layout #controlBar button#autoPatchBtn{background:#fff4e6 !important;}
 html body.compact-layout #controlBar button#nutsBtn{background:#fff4e6 !important;}
 html body.compact-layout #controlBar #shotBtn{background:#cdb4ff;}
-</style>
+
+/* ===== FLOATING APP FRAME: top = main area, bottom = patch bar, curved corners, floating backdrop ===== */
+html, body {
+  background:
+    radial-gradient(900px 600px at 10% 10%, color-mix(in srgb, #2f46ff 55%, #000432) 0%, transparent 70%),
+    radial-gradient(900px 600px at 95% 90%, color-mix(in srgb, #6a35ff 50%, #000432) 0%, transparent 70%),
+    linear-gradient(135deg, color-mix(in srgb, #2f46ff 35%, #000432), color-mix(in srgb, #00a2ff 30%, #000432)) !important;
+  background-attachment: fixed !important;
+}
+body.compact-layout::before {
+  content: ""; position: fixed; top: 4px; left: 4px; right: 4px; bottom: 4px;
+  border-radius: 30px; background: #000432; z-index: 0; pointer-events: none;
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.14), 0 14px 44px rgba(0,0,0,0.6), 0 2px 10px rgba(0,0,0,0.4);
+}
+html body.compact-layout #preview,
+html body.compact-layout #codeView {
+  top: 4px !important; left: 4px !important; right: auto !important; bottom: auto !important;
+  width: calc(100% - 8px) !important; height: calc(100% - 50px) !important;
+  border-radius: 30px 30px 0 0 !important; overflow: hidden;
+}
+html body.compact-layout #codeView { overflow: auto; }
+html body.compact-layout #fring {
+  top: 4px !important; left: 4px !important; right: 4px !important; bottom: 46px !important;
+  border-radius: 30px 30px 0 0 !important;
+}
+html body.compact-layout #controlBar {
+  left: 4px !important; right: auto !important; bottom: 4px !important;
+  width: calc(100% - 8px) !important; height: 42px !important; min-height: 42px !important;
+  border-radius: 0 0 30px 30px !important;
+  border-top: 1px solid rgba(255,255,255,0.28) !important;
+}
+html body.compact-layout #ghConfigPanel { bottom: 54px !important; }
+html body.compact-layout #toast { bottom: 54px !important; }
+
+/* ===== SINGLE BIG PILL: one clip for preview + patch bar ===== */
+:root, :root body { padding: 0 !important; margin: 0 !important; height: 100% !important; }
+:root body.compact-layout { clip-path: none !important; }
+:root body.compact-layout::before {
+  content: "" !important; display: block !important; position: fixed !important;
+  top: 4px !important; left: 4px !important; right: 4px !important; bottom: 4px !important;
+  border-radius: 30px !important; background: #000432 !important; z-index: 0 !important; pointer-events: none !important;
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.14), 0 14px 44px rgba(0,0,0,0.6), 0 2px 10px rgba(0,0,0,0.4) !important;
+}
+:root body.compact-layout #preview,
+:root body.compact-layout #codeView,
+:root body.compact-layout #fring {
+  position: fixed !important; top: 4px !important; left: 4px !important; right: auto !important; bottom: auto !important;
+  width: calc(100vw - 8px) !important; height: calc(100vh - 50px) !important; max-height: none !important;
+  border-radius: 30px 30px 0 0 !important;
+}
+:root body.compact-layout #controlBar {
+  position: fixed !important; left: 4px !important; right: auto !important; top: auto !important; bottom: 4px !important;
+  width: calc(100vw - 8px) !important; height: 42px !important; min-height: 42px !important;
+  border-radius: 0 0 30px 30px !important; border: 0 !important; overflow: hidden !important;
+}
+html body.compact-layout #preview,
+html body.compact-layout #codeView {
+  top: 4px !important; left: 4px !important; right: auto !important; bottom: auto !important;
+  width: calc(100% - 8px) !important; height: calc(100% - 50px) !important;
+  border-radius: 0 !important;
+}
+html body.compact-layout #fring {
+  top: 4px !important; left: 4px !important; right: 4px !important; bottom: 46px !important;
+  border-radius: 0 !important;
+}
+html body.compact-layout #controlBar {
+  left: 4px !important; right: auto !important; bottom: 4px !important;
+  width: calc(100% - 8px) !important; height: 42px !important; min-height: 42px !important;
+  border-radius: 0 !important; border: 0 !important; box-shadow: none !important;
+  }
+  html body.compact-layout #preview,
+  html body.compact-layout #codeView {
+    position: fixed !important;
+    top: 4px !important; left: 4px !important; right: auto !important; bottom: auto !important;
+    width: calc(100vw - 8px) !important; height: calc(100vh - 50px) !important;
+    max-height: none !important; border-radius: 0 !important;
+  }
+  html body.compact-layout #fring {
+    position: fixed !important;
+    top: 4px !important; left: 4px !important; right: auto !important; bottom: auto !important;
+    width: calc(100vw - 8px) !important; height: calc(100vh - 50px) !important;
+    border-radius: 0 !important;
+  }
+  html body.compact-layout #controlBar {
+    position: fixed !important; left: 4px !important; right: auto !important; top: auto !important; bottom: 4px !important;
+    width: calc(100vw - 8px) !important; height: 42px !important;
+  }
+  </style>
 </head>
 <body class="compact-layout">
 <script>(function () { try { var par = window.parent; if (par !== window && par.document) { var pv = par.document.getElementById('preview'); if (pv && pv.contentWindow === window) { window.stop(); } } } catch (e) {} })();</script>
