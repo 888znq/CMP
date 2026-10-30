@@ -710,7 +710,24 @@ html body.compact-layout #toast { bottom: 54px !important; }
   position: fixed !important; left: 4px !important; right: auto !important; top: auto !important; bottom: 4px !important;
   width: calc(100vw - 8px) !important; height: 42px !important; min-height: 42px !important;
   border-radius: 0 0 30px 30px !important; border: 0 !important; overflow: hidden !important;
-}
+  }
+  /* edge-to-edge: one outer pill around preview + patch bar */
+  html:root body.compact-layout { clip-path: inset(0 round 30px) !important; background: #000432 !important; }
+  html:root body.compact-layout::before { content: none !important; display: none !important; }
+  html:root body.compact-layout #preview,
+  html:root body.compact-layout #codeView,
+  html:root body.compact-layout #fring {
+    position: fixed !important; top: 0 !important; left: 0 !important; right: auto !important; bottom: auto !important;
+    width: 100vw !important; height: calc(100vh - 42px) !important; max-height: none !important;
+    border-radius: 0 !important;
+  }
+  html:root body.compact-layout #controlBar {
+    position: fixed !important; left: 0 !important; right: auto !important; top: auto !important; bottom: 0 !important;
+    width: 100vw !important; height: 42px !important; min-height: 42px !important;
+    border-radius: 0 !important; border: 0 !important; overflow: hidden !important;
+  }
+  html:root body.compact-layout #ghConfigPanel { bottom: 50px !important; }
+  html:root body.compact-layout #toast { bottom: 50px !important; }
 html body.compact-layout #preview,
 html body.compact-layout #codeView {
   top: 4px !important; left: 4px !important; right: auto !important; bottom: auto !important;
