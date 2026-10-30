@@ -754,6 +754,20 @@ html body.compact-layout #toast { bottom: 54px !important; }
   }
   html:root body.compact-layout #ghConfigPanel { bottom: 60px !important; }
   html:root body.compact-layout #toast { bottom: 60px !important; }
+  /* seamless bottom: preview overlaps the bar, solid backing behind both */
+  html:root body.compact-layout::after {
+    content: "" !important; display: block !important; position: fixed !important;
+    left: 10px !important; right: 10px !important; top: auto !important; bottom: 10px !important; height: 90px !important;
+    background: #000432 !important; z-index: 0 !important; pointer-events: none !important;
+  }
+  html:root body.compact-layout #preview,
+  html:root body.compact-layout #codeView,
+  html:root body.compact-layout #fring {
+    height: calc(100vh - 56px) !important;
+  }
+  html:root body.compact-layout #controlBar {
+    top: calc(100vh - 52px) !important; bottom: auto !important; height: 42px !important; z-index: 100 !important;
+  }
 html body.compact-layout #preview,
 html body.compact-layout #codeView {
   top: 4px !important; left: 4px !important; right: auto !important; bottom: auto !important;
