@@ -2952,8 +2952,8 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
     var payloadBtn = document.getElementById('payloadBtn');
     if (!box || !payloadBtn) return;
     var SPLIT_MARK = '===' + 'SPLIT' + '===';
-    var on = (window.parent !== window) || !!(window.AndroidClipboard && typeof window.AndroidClipboard.read === 'function');
-        var inFrame = true; on = (window.parent !== window) || !!(window.AndroidClipboard && typeof window.AndroidClipboard.read === 'function'); on = (window.parent !== window) || !!(window.AndroidClipboard && typeof window.AndroidClipboard.read === 'function');
+    var on = true;
+        var inFrame = true;
     window.__extApplyPatch = function (t) {   // the extension replaces this one; in a plain tab this one is used
       var ab = document.getElementById('pasteAndProcessBtn'), old = window.AndroidClipboard;
       window.AndroidClipboard = { read: function () { return t; } };
