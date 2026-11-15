@@ -817,7 +817,22 @@ html body.compact-layout #controlBar {
       }
       html:root body.compact-layout #ghConfigPanel { bottom: 50px !important; }
       html:root body.compact-layout #toast { bottom: 50px !important; }
-      </style>
+            /* square corners: no clip, no radius, no gradient showing at the window corners */
+            html:root { background: #000432 !important; border-radius: 0 !important; }
+            html:root body.compact-layout {
+              clip-path: none !important; border-radius: 0 !important; background: #000432 !important;
+            }
+            html:root body.compact-layout::before,
+            html:root body.compact-layout::after { border-radius: 0 !important; }
+            html:root body.compact-layout #preview,
+            html:root body.compact-layout #codeView,
+            html:root body.compact-layout #fring,
+            html:root body.compact-layout #controlBar,
+            html:root body.compact-layout #controlBar #repoBar,
+            html:root body.compact-layout #controlBar #repoBar .repo-btn,
+            html:root body.compact-layout #controlBar #ghNewRepoBtn,
+            html:root body.compact-layout #controlBar #aiInstruction { border-radius: 0 !important; }
+            </style>
 <script>(function(){try{var p=window.parent;if(p!==window){var pv=p.document.getElementById('preview');if(pv&&pv.contentWindow===window){document.documentElement.classList.add('in-pv');}}}catch(e){}})();</script>
 <style>
 html.in-pv:root,
