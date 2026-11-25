@@ -1339,15 +1339,20 @@ html:root body.compact-layout:not(#x) #controlBar { z-index: 100 !important; }
     ghFilePath = document.getElementById('ghFilePath').value.trim() || 'index.html';
     ghSaveConfig(); await ghFetchAllRepos(); ghRenderRepoPanelList(); toast('✅ Repos synced from GitHub!');
   });
-  document.getElementById('pushBtn').addEventListener('click', () => {
-    if (!sourceContent) { toast('❌ Nothing to push — load content first'); return; }
-    if (!ghToken)       { toast('❌ GitHub token not set — open ⚙ GH settings'); return; }
-    if (!ghCurrentRepo) { toast('❌ No repo selected'); return; }
-    if (window._loadedRepo && window._loadedRepo !== ghCurrentRepo) { toast('🚫 Push blocked: the code loaded is from ' + window._loadedRepo + ', not ' + ghCurrentRepo + '. Re-tap the repo first.', 6000); return; }
-    const ts = new Date().toISOString().replace('T',' ').slice(0,19);
-    document.getElementById('commitMsgInput').value = `Update ${ghFilePath || 'index.html'} via AI Compile — ${ts}`;
-    document.getElementById('commitModal').classList.add('open');
-  });
+  document.getElementById('pushBtn').addEventListener('click', async (e) => {
+      if (!sourceContent) { toast('❌ Nothing to push — load content first'); return; }
+      if (!ghToken)       { toast('❌ GitHub token not set — open ⚙ GH settings'); return; }
+      if (!ghCurrentRepo) { toast('❌ No repo selected'); return; }
+      if (window._loadedRepo && window._loadedRepo !== ghCurrentRepo) { toast('🚫 Push blocked: the code loaded is from ' + window._loadedRepo + ', not ' + ghCurrentRepo + '. Re-tap the repo first.', 6000); return; }
+      const ts = new Date().toISOString().replace('T',' ').slice(0,19);
+      const defaultMsg = `Update ${ghFilePath || 'index.html'} via AI Compile — ${ts}`;
+      if (e && e.shiftKey) {
+        document.getElementById('commitMsgInput').value = defaultMsg;
+        document.getElementById('commitModal').classList.add('open');
+        return;
+      }
+      await ghPushFile(defaultMsg);
+    });
   document.getElementById('cmCancelBtn').addEventListener('click', () => { document.getElementById('commitModal').classList.remove('open'); });
   document.getElementById('cmConfirmBtn').addEventListener('click', async () => {
     const msg = document.getElementById('commitMsgInput').value.trim();
@@ -1370,48 +1375,53 @@ html:root body.compact-layout:not(#x) #controlBar { z-index: 100 !important; }
     } catch(e) { return null; }
   }
   async function ghPushFile(commitMsg) {
-    const btn = document.getElementById('pushBtn');
-    btn.classList.add('pushing'); btn.disabled = true;
-    const branch   = ghBranch   || 'main';
-    const filePath = ghFilePath || 'index.html';
-    const repo     = (ghCurrentRepo && ghCurrentRepo.indexOf('/') === -1) ? ((ghUser || '888znq') + '/' + ghCurrentRepo) : ghCurrentRepo;
-    try {
-      toast('⬆ Pushing to GitHub…', 4000);
-      document.getElementById('statusLeft').textContent = `⬆ Pushing to ${repo}…`;
-      const encoded = btoa(unescape(encodeURIComponent(sourceContent)));
-      const cleanPath = String(filePath).replace(/^\/+/, '');
-      const doPut = async function () {
-        const sha = await ghGetFileSHA(repo, cleanPath, branch);
-        const body = { message: commitMsg, content: encoded, branch: branch };
-        if (sha) body.sha = sha;
-        return fetch(`https://api.github.com/repos/${repo}/contents/${cleanPath.split('/').map(encodeURIComponent).join('/')}`, {
-          method: 'PUT',
-          headers: { Authorization: `token ${ghToken}`, Accept: 'application/vnd.github.v3+json', 'Content-Type': 'application/json' },
-          body: JSON.stringify(body)
-        });
-      };
-      let res = await doPut();
-      if (!res.ok && res.status !== 401 && res.status !== 403) {
-        const firstErr = await res.clone().json().catch(function () { return {}; });
-        if (/sha/i.test(firstErr.message || '') || res.status === 409 || res.status === 422) {
-          await new Promise(function (r) { setTimeout(r, 600); });
-          res = await doPut();
+      if (window._ghPushing) return false;
+      window._ghPushing = true;
+      const btn = document.getElementById('pushBtn');
+      btn.classList.add('pushing'); btn.disabled = true;
+      const branch   = ghBranch   || 'main';
+      const filePath = ghFilePath || 'index.html';
+      const repo     = (ghCurrentRepo && ghCurrentRepo.indexOf('/') === -1) ? ((ghUser || '888znq') + '/' + ghCurrentRepo) : ghCurrentRepo;
+      try {
+        toast('⬆ Pushing to GitHub…', 4000);
+        document.getElementById('statusLeft').textContent = `⬆ Pushing to ${repo}…`;
+        const encoded = btoa(unescape(encodeURIComponent(sourceContent)));
+        const cleanPath = String(filePath).replace(/^\/+/, '');
+        const doPut = async function () {
+          const sha = await ghGetFileSHA(repo, cleanPath, branch);
+          const body = { message: commitMsg, content: encoded, branch: branch };
+          if (sha) body.sha = sha;
+          return fetch(`https://api.github.com/repos/${repo}/contents/${cleanPath.split('/').map(encodeURIComponent).join('/')}`, {
+            method: 'PUT',
+            headers: { Authorization: `token ${ghToken}`, Accept: 'application/vnd.github.v3+json', 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+          });
+        };
+        let res = await doPut();
+        if (!res.ok && res.status !== 401 && res.status !== 403) {
+          const firstErr = await res.clone().json().catch(function () { return {}; });
+          if (/sha/i.test(firstErr.message || '') || res.status === 409 || res.status === 422) {
+            await new Promise(function (r) { setTimeout(r, 600); });
+            res = await doPut();
+          }
         }
-      }
-      if (res.ok) {
-        const data = await res.json();
-        document.getElementById('statusLeft').textContent = `✅ Pushed to ${repo}`;
-        toast(`✅ Pushed! SHA: ${data.content?.sha?.slice(0,7) || 'ok'}`);
-      } else {
-        const err = await res.json().catch(()=>({}));
-        document.getElementById('statusLeft').textContent = `❌ Push failed`;
-        toast(`❌ Push failed: ${err.message || res.status}` + ((res.status === 403 || res.status === 404) ? ' — token needs write access to ' + repo : ''), 7000);
-      }
-    } catch(e) {
-      document.getElementById('statusLeft').textContent = '❌ Push error';
-      toast('❌ Push error: ' + e.message);
-    } finally { btn.classList.remove('pushing'); btn.disabled = false; }
-  }
+        if (res.ok) {
+          const data = await res.json();
+          document.getElementById('statusLeft').textContent = `✅ Pushed to ${repo}`;
+          toast(`✅ Pushed! SHA: ${data.content?.sha?.slice(0,7) || 'ok'}`);
+          return true;
+        } else {
+          const err = await res.json().catch(()=>({}));
+          document.getElementById('statusLeft').textContent = `❌ Push failed`;
+          toast(`❌ Push failed: ${err.message || res.status}` + ((res.status === 403 || res.status === 404) ? ' — token needs write access to ' + repo : ''), 7000);
+          return false;
+        }
+      } catch(e) {
+        document.getElementById('statusLeft').textContent = '❌ Push error';
+        toast('❌ Push error: ' + e.message);
+        return false;
+      } finally { window._ghPushing = false; btn.classList.remove('pushing'); btn.disabled = false; }
+    }
 
   // ── Create New Repo + Push + Enable Pages ───────────────────────────────
   function nrLog(msg) {
@@ -3470,35 +3480,290 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
       return;
     }
 
-    const MAX_LINE = 3000;
-    for (const b of blocks) {
-      let worst = 0;
-      (b.newCode || '').split('\n').forEach(function (l) { if (l.length > worst) worst = l.length; });
-      const hasB64 = /base64,[A-Za-z0-9+\/=]{2000,}/.test(b.newCode || '');
-      if (worst > MAX_LINE || hasB64) {
-        ind.textContent = '📋 Patch: Ready';
-        ind.className = '';
-        showErr('🚫🚫🚫 PATCH BLOCKED 🚫🚫🚫\n\n' + (hasB64 ? 'It contains an embedded base64 blob (image, font or data).' : 'It has a line of ' + worst + ' characters (limit ' + MAX_LINE + ').') + '\n\nVery long lines (minified code, base64, one-line JSON) cannot be split into parts, so the AI index cannot show or request them.\n\nNOTHING WAS CHANGED.\n\nFix: keep that data in a separate file, or ask the AI to put it in a normal multi-line format.');
-        toast('🚫 PATCH BLOCKED: line too long (' + worst + ' chars)', 8000);
-        return;
-      }
-    }
-    let allOk = true;
-    for (const block of blocks) {
-      const ok = await autoLockAndApply(block);
-      if (!ok) { allOk = false; break; }
-    }
-
-    pendingOldCode = null;
-    ind.textContent = '📋 Patch: Ready';
-    ind.className = allOk ? 'active' : '';
-        if (allOk && window._autoRearm) window._autoRearm();
-                if (allOk) window._nutsErrTries = 0;
-    if (allOk) {
-      document.getElementById('statusLeft').textContent = `✨ Patch applied @ ${new Date().toLocaleTimeString()}`;
-      if (blocks.length > 1) toast(`⚡ ${blocks.length} patches applied!`);
-    }
-  });
+    if (window._patchGuardBusy) {
+          toast('⏳ Previous patch is still verifying/pushing…', 3000);
+          return;
+        }
+        window._patchGuardBusy = true;
+    
+        function checkJsSyntax(code, isMod) {
+          try {
+            if (!isMod) {
+              new Function(code);
+              return null;
+            }
+            var stripped = code
+              .replace(/^\s*import\s+(?:[\s\S]*?\s+from\s+)?['"][^'"]+['"]\s*;?/gm, '')
+              .replace(/^\s*export\s+default\s+/gm, '')
+              .replace(/^\s*export\s+(?=(?:async\s+)?(?:function|class|const|let|var)\b)/gm, '')
+              .replace(/^\s*export\s*\{[^}]*\}\s*(?:from\s*['"][^'"]+['"])?\s*;?/gm, '');
+            new Function('return async function(){\n' + stripped + '\n}');
+            return null;
+          } catch (e) {
+            return (e && e.message) ? e.message : String(e);
+          }
+        }
+    
+        function checkCssBraces(cssText) {
+          var depth = 0, i = 0, n = cssText.length, inStr = '', ch;
+          while (i < n) {
+            ch = cssText[i];
+            if (inStr) {
+              if (ch === '\\') { i += 2; continue; }
+              if (ch === inStr) inStr = '';
+              i++; continue;
+            }
+            if (ch === '/' && cssText[i + 1] === '*') {
+              var endC = cssText.indexOf('*/', i + 2);
+              if (endC < 0) return 'Unclosed CSS comment /*';
+              i = endC + 2; continue;
+            }
+            if (ch === '"' || ch === "'") { inStr = ch; i++; continue; }
+            if (ch === '{') depth++;
+            else if (ch === '}') { depth--; if (depth < 0) return 'Extra closing } in CSS'; }
+            i++;
+          }
+          if (inStr) return 'Unclosed CSS string ' + inStr;
+          if (depth !== 0) return depth + ' unclosed { in CSS';
+          return null;
+        }
+    
+        function validateCodeIntegrity(src, origSrc, filePath) {
+          if (!src || !src.trim()) return 'Patched file would be empty.';
+          if (src === origSrc) return 'Patch produced zero changes.';
+          var ext = String(filePath || '').toLowerCase().split('.').pop();
+          var isHtml = ext === 'html' || ext === 'htm' || /<!doctype\s+html|<html\b|<script\b|<style\b/i.test(src);
+          var isJson = !isHtml && ext === 'json';
+          var isJs   = !isHtml && (ext === 'js' || ext === 'mjs' || ext === 'cjs');
+          if (isJson) {
+            try { JSON.parse(src); } catch (e) { return 'Invalid JSON: ' + e.message; }
+            return null;
+          }
+          if (isJs) {
+            var jsErr = checkJsSyntax(src, /\b(import|export)\b/.test(src));
+            return jsErr ? ('JavaScript syntax error: ' + jsErr) : null;
+          }
+          if (!isHtml) return null;
+    
+          var scanRe = new RegExp('<!--[\\s\\S]*?-->|<scr' + 'ipt\\b([^>]*)>([\\s\\S]*?)<\\/scr' + 'ipt>|<sty' + 'le\\b([^>]*)>([\\s\\S]*?)<\\/sty' + 'le>', 'gi');
+          var scriptIdx = 0, styleIdx = 0, fatalErr = null;
+          var skeleton = src.replace(scanRe, function (m, sAttr, sBody, cAttr, cBody) {
+            if (fatalErr) return '';
+            if (typeof sBody === 'string') {
+              scriptIdx++;
+              var attr = sAttr || '';
+              var skip = /\bsrc\s*=/i.test(attr) || /\btype\s*=\s*["']?(?:application\/(?:ld\+)?json|importmap|text\/(?:plain|template|html))/i.test(attr);
+              if (!skip && sBody.trim()) {
+                var isMod = /\btype\s*=\s*["']?module\b/i.test(attr);
+                var err = checkJsSyntax(sBody, isMod);
+                if (err) fatalErr = 'JavaScript syntax error in <scr' + 'ipt> #' + scriptIdx + ': ' + err;
+              }
+              return '';
+            }
+            if (typeof cBody === 'string') {
+              styleIdx++;
+              var cErr = checkCssBraces(cBody);
+              if (cErr) fatalErr = 'CSS error in <sty' + 'le> #' + styleIdx + ': ' + cErr;
+              return '';
+            }
+            return '';
+          });
+          if (fatalErr) return fatalErr;
+    
+          var strayRe = new RegExp('<\\/?(?:scr' + 'ipt|sty' + 'le)\\b', 'i');
+          if (strayRe.test(skeleton)) return 'Unclosed or mismatched <scr' + 'ipt> / <sty' + 'le> tag.';
+    
+          var origSkeleton = (origSrc || '').replace(scanRe, '');
+          var tags = ['html', 'head', 'body'];
+          for (var t = 0; t < tags.length; t++) {
+            var tg = tags[t];
+            var openRe = new RegExp('<' + tg + '(?:\\s[^>]*)?>', 'gi');
+            var closeRe = new RegExp('<\\/' + tg + '\\s*>', 'gi');
+            var oOpen = (origSkeleton.match(openRe) || []).length;
+            var oClose = (origSkeleton.match(closeRe) || []).length;
+            var nOpen = (skeleton.match(openRe) || []).length;
+            var nClose = (skeleton.match(closeRe) || []).length;
+            if (oOpen === oClose && nOpen !== nClose) {
+              return 'Unbalanced <' + tg + '> tag (open: ' + nOpen + ', close: ' + nClose + ').';
+            }
+          }
+          return null;
+        }
+    
+        function dryRunAndValidatePatch(batch) {
+          var STRICT_FUZZY_MIN = 90;
+          var candidate = sourceContent;
+          for (var i = 0; i < batch.length; i++) {
+            var b = batch[i];
+            if (b.malformed) return { ok: false, err: b.reason || ('Block ' + (i + 1) + ' is malformed.') };
+            if (!b.oldCode || !b.oldCode.trim()) return { ok: false, err: 'Block ' + (i + 1) + '/' + batch.length + ' has an empty OLD section.' };
+            var normOld = b.oldCode.replace(/\r\n/g, '\n');
+            var normNew = (b.newCode || '').replace(/\r\n/g, '\n');
+            if (normOld === normNew) return { ok: false, err: 'Block ' + (i + 1) + '/' + batch.length + ' has identical OLD and NEW code (no-op).' };
+    
+            window._failOld = b.oldCode;
+            var loc = findFingerprintedChunk(candidate, b.oldCode);
+            if (!loc) {
+              return { ok: false, err: 'Chunk not found in source (block ' + (i + 1) + '/' + batch.length + ').\n\nThe OLD block did not match anything:\n"' + b.oldCode.slice(0, 120).trim() + (b.oldCode.length > 120 ? '…' : '') + '"' };
+            }
+            if (loc.ambiguous) {
+              return { ok: false, err: 'Ambiguous match in block ' + (i + 1) + '/' + batch.length + ' — patch blocked.\n\nThis OLD block matches more than one location. Send more surrounding context.' };
+            }
+            if (loc.isFuzzy && loc.confidence < STRICT_FUZZY_MIN) {
+              return { ok: false, err: 'Low confidence match (' + loc.confidence + '% < ' + STRICT_FUZZY_MIN + '%) in block ' + (i + 1) + '/' + batch.length + ' — patch blocked.' };
+            }
+            var newT = normNew;
+            if (newT.length > 0) {
+              var lines = newT.split('\n');
+              var nonEmpty = lines.filter(function (l) { return l.trim(); });
+              var minIndent = nonEmpty.length ? Math.min.apply(null, nonEmpty.map(function (l) { return l.match(/^[ \t]*/)[0].length; })) : 0;
+              var neededIndent = loc.baseIndent;
+              if (neededIndent.length > minIndent) {
+                var padding = neededIndent.substring(minIndent);
+                lines = lines.map(function (l, idx) { return idx === 0 ? l : padding + l; });
+                newT = lines.join('\n');
+              }
+            }
+            candidate = candidate.slice(0, loc.startIndex) + newT + candidate.slice(loc.endIndex);
+          }
+          var integrityErr = validateCodeIntegrity(candidate, sourceContent, ghFilePath);
+          if (integrityErr) {
+            return { ok: false, err: '🚫 HARDCORE GUARD BLOCKED PATCH — code integrity check failed:\n\n' + integrityErr + '\n\nNOTHING WAS CHANGED AND NOTHING WAS PUSHED.' };
+          }
+          return { ok: true, candidate: candidate };
+        }
+    
+        function getPreviewErrSigs() {
+          var sigs = Object.create(null);
+          try {
+            var w = $pv && $pv.contentWindow;
+            var list = (w && w.__aiErrs) ? w.__aiErrs : [];
+            list.forEach(function (e) { sigs[e.k + ':' + e.m] = 1; });
+          } catch (e) {}
+          return sigs;
+        }
+    
+        function verifyPreviewRuntime(preSigs) {
+          if (isCodeMode || !$pv || !/<!doctype\s+html|<html\b|<script\b/i.test(sourceContent)) {
+            return Promise.resolve({ ok: true });
+          }
+          return new Promise(function (resolve) {
+            var settled = false;
+            function checkNow() {
+              if (settled) return;
+              settled = true;
+              clearTimeout(hardCap);
+              $pv.removeEventListener('load', onLoad);
+              var fresh = [];
+              try {
+                var w = $pv.contentWindow;
+                var list = (w && w.__aiErrs) ? Array.prototype.slice.call(w.__aiErrs) : [];
+                fresh = list.filter(function (e) { return e.k === 'error' && !preSigs[e.k + ':' + e.m]; });
+              } catch (e) {}
+              resolve(fresh.length ? { ok: false, errs: fresh } : { ok: true });
+            }
+            function onLoad() { setTimeout(checkNow, 450); }
+            $pv.addEventListener('load', onLoad, { once: true });
+            var hardCap = setTimeout(checkNow, 1600);
+          });
+        }
+    
+        try {
+          const MAX_LINE = 3000;
+          for (const b of blocks) {
+            if (b.malformed) {
+              ind.textContent = '📋 Patch: Ready';
+              ind.className = '';
+              showErr('🚫 PATCH BLOCKED — Malformed block.\n\n' + b.reason + '\n\nNOTHING WAS CHANGED AND NOTHING WAS PUSHED.');
+              return;
+            }
+            let worst = 0;
+            (b.newCode || '').split('\n').forEach(function (l) { if (l.length > worst) worst = l.length; });
+            const hasB64 = /base64,[A-Za-z0-9+\/=]{2000,}/.test(b.newCode || '');
+            if (worst > MAX_LINE || hasB64) {
+              ind.textContent = '📋 Patch: Ready';
+              ind.className = '';
+              showErr('🚫🚫🚫 PATCH BLOCKED 🚫🚫🚫\n\n' + (hasB64 ? 'It contains an embedded base64 blob (image, font or data).' : 'It has a line of ' + worst + ' characters (limit ' + MAX_LINE + ').') + '\n\nVery long lines (minified code, base64, one-line JSON) cannot be split into parts, so the AI index cannot show or request them.\n\nNOTHING WAS CHANGED.\n\nFix: keep that data in a separate file, or ask the AI to put it in a normal multi-line format.');
+              toast('🚫 PATCH BLOCKED: line too long (' + worst + ' chars)', 8000);
+              return;
+            }
+          }
+    
+          const dry = dryRunAndValidatePatch(blocks);
+          if (!dry.ok) {
+            ind.textContent = '📋 Patch: Ready';
+            ind.className = '';
+            showErr(dry.err);
+            toast('🚫 Patch blocked by hardcore safety guard — nothing changed', 5000);
+            return;
+          }
+    
+          const prePatchSource = sourceContent;
+          const preUndoLen     = undoStack.length;
+          const preErrSigs     = getPreviewErrSigs();
+          const targetRepo     = ghCurrentRepo;
+    
+          let allOk = true;
+          for (const block of blocks) {
+            const ok = await autoLockAndApply(block);
+            if (!ok) { allOk = false; break; }
+          }
+    
+          if (!allOk) {
+            sourceContent = prePatchSource;
+            undoStack.length = preUndoLen;
+            redoStack = [];
+            document.getElementById('undoBtn').disabled = (undoStack.length === 0);
+            document.getElementById('redoBtn').disabled = true;
+            render(sourceContent);
+            if (fileHandle) await nativeSilentSave(sourceContent);
+            ind.textContent = '📋 Patch: Ready';
+            ind.className = '';
+            return;
+          }
+    
+          ind.textContent = '🛡️ Verifying…';
+          const rt = await verifyPreviewRuntime(preErrSigs);
+          if (!rt.ok) {
+            sourceContent = prePatchSource;
+            undoStack.length = preUndoLen;
+            redoStack = [];
+            document.getElementById('undoBtn').disabled = (undoStack.length === 0);
+            document.getElementById('redoBtn').disabled = true;
+            render(sourceContent);
+            if (fileHandle) await nativeSilentSave(sourceContent);
+            ind.textContent = '📋 Patch: Ready';
+            ind.className = '';
+            const errTxt = rt.errs.slice(0, 4).map(function (e) { return e.m + (e.l ? ' (L' + e.l + ')' : ''); }).join('\n');
+            showErr('🚫 RUNTIME ERROR AFTER PATCH — ROLLED BACK & PUSH BLOCKED\n\n' + errTxt + '\n\nPrevious working code has been restored. Nothing was pushed to GitHub.');
+            toast('🚫 Runtime error detected — rolled back, NOT pushed!', 6000);
+            return;
+          }
+    
+          pendingOldCode = null;
+          if (window._autoRearm) window._autoRearm();
+          window._nutsErrTries = 0;
+    
+          const canAutoPush = !!(ghToken && targetRepo && window._loadedRepo && window._loadedRepo === targetRepo && ghCurrentRepo === targetRepo);
+          if (canAutoPush) {
+            ind.textContent = '⬆ Auto-Pushing…';
+            const ts = new Date().toISOString().replace('T', ' ').slice(0, 19);
+            const pushed = await ghPushFile(`Auto-push verified patch (${blocks.length} block${blocks.length > 1 ? 's' : ''}) — ${ts}`);
+            ind.textContent = '📋 Patch: Ready';
+            ind.className = pushed ? 'active' : '';
+            if (pushed) {
+              document.getElementById('statusLeft').textContent = `🚀 Verified & Auto-Pushed @ ${new Date().toLocaleTimeString()}`;
+            }
+          } else {
+            ind.textContent = '📋 Patch: Ready';
+            ind.className = 'active';
+            document.getElementById('statusLeft').textContent = `✨ Patch verified & applied @ ${new Date().toLocaleTimeString()}`;
+            if (blocks.length > 1) toast(`⚡ ${blocks.length} verified patches applied!`);
+          }
+        } finally {
+          window._patchGuardBusy = false;
+        }
+      });
 
   // ── Prompt button ─────────────────────────────────────────────────────
   document.getElementById('promptBtn').addEventListener('click', async () => {
@@ -3558,23 +3823,25 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
   }
 
   // ── Patch Parsing ─────────────────────────────────────────────────────
-  function parseAllBlocks(text) {
-    const normalized = text.replace(/\r\n/g, '\n');
-    const cleaned    = normalized.replace(/\/\/\s*(OLD|NEW)\s*CHUNK\s*/gi, '').trim();
-    const stripped   = cleaned.replace(/^```[\w]*\n?/gm, '').replace(/^```$/gm, '').trim();
-    const units      = stripped.split(/={3}\s*BLOCK[^=\n]*={3}/i).map(u => u.trim()).filter(Boolean);
-    if (units.length > 1) {
-      return units.map(u => {
-        const splitRe = /={3}\s*SPLIT\s*={3}/i;
-        const m = u.match(splitRe);
-        if (!m) return null;
-        const idx = u.indexOf(m[0]);
-        return { oldCode: u.slice(0, idx).trim(), newCode: u.slice(idx + m[0].length).trim() };
-      }).filter(Boolean);
+    function parseAllBlocks(text) {
+      const normalized = text.replace(/\r\n/g, '\n');
+      const cleaned    = normalized.replace(/\/\/\s*(OLD|NEW)\s*CHUNK\s*/gi, '').trim();
+      const stripped   = cleaned.replace(/^```[\w]*\n?/gm, '').replace(/^```$/gm, '').trim();
+      const units      = stripped.split(/={3}\s*BLOCK[^=\n]*={3}/i).map(u => u.trim()).filter(Boolean);
+      if (units.length > 1) {
+        return units.map((u, i) => {
+          const splitRe = /={3}\s*SPLIT\s*={3}/i;
+          const m = u.match(splitRe);
+          if (!m) return { malformed: true, reason: `Block ${i + 1}/${units.length} is missing the split marker.` };
+          const idx = u.indexOf(m[0]);
+          const oldPart = u.slice(0, idx).trim();
+          if (!oldPart) return { malformed: true, reason: `Block ${i + 1}/${units.length} has an empty OLD block.` };
+          return { oldCode: oldPart, newCode: u.slice(idx + m[0].length).trim() };
+        });
+      }
+      const single = parseSmartBlock(stripped);
+      return single ? [single] : [];
     }
-    const single = parseSmartBlock(stripped);
-    return single ? [single] : [];
-  }
 
   function parseSmartBlock(text) {
     const splitRe = /={3}\s*SPLIT\s*={3}/i;
@@ -3746,7 +4013,7 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
     const loc = findFingerprintedChunk(sourceContent, parsed.oldCode);
     if (!loc) { showErr(`Chunk not found in source.\n\nThe patch's OLD block didn't match anything:\n"${parsed.oldCode.slice(0,120).trim()}${parsed.oldCode.length>120?'…':''}"`); return false; }
     if (loc.ambiguous) { showErr(`Ambiguous match — patch not applied.\n\nThis OLD block matches more than one location in the file.\nSend a larger, more unique chunk of surrounding code so the patch can target the exact spot.`); return false; }
-    if (loc.isFuzzy && loc.confidence < 70) { showErr(`Low confidence match (${loc.confidence}%) — patch not applied.\n\nThe OLD block matched fuzzily but not reliably enough.\nTry sending a larger context window around the change.`); return false; }
+    if (loc.isFuzzy && loc.confidence < 90) { showErr(`Low confidence match (${loc.confidence}%) — patch not applied.\n\nThe OLD block matched fuzzily but not reliably enough.\nTry sending a larger context window around the change.`); return false; }
     var newT = parsed.newCode.replace(/\r\n/g, '\n');
     const currentLoc = findFingerprintedChunk(sourceContent, loc.originalText);
     if (!currentLoc) return false;
