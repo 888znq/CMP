@@ -1689,8 +1689,9 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
   const $errOverlay = document.getElementById('errOverlay');
   const $errBody    = document.getElementById('errBody');
   var _lastErrMsg   = '';
-  function showErr(msg) {
-      _lastErrMsg = msg; $errBody.textContent = msg; $errOverlay.style.display = 'block';
+    function showErr(msg) {
+        _lastErrMsg = msg; $errBody.textContent = msg; $errOverlay.style.display = 'block';
+        bigFlash(msg, 3400, 'err');
       // nuts mode: send the error straight back to the AI so it can fix the patch
       var _nb = document.getElementById('nutsBtn');
             var _nutsOn = window.__NUTS === true || !!(_nb && _nb.classList.contains('nuts-on'));
@@ -3866,12 +3867,93 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
   }
 
   // ── Flash / Toast ─────────────────────────────────────────────────────
-  function flash() { $fring.classList.add('on'); setTimeout(() => $fring.classList.remove('on'), 400); }
-  function toast(msg, duration) {
-    if (duration === undefined) duration = 2500;
-    $toast.textContent = msg; $toast.classList.add('show');
-    setTimeout(() => $toast.classList.remove('show'), duration);
-  }
+    var _bigFlashTimer = 0;
+    var _bigFlashPulseTimer = 0;
+    function ensureBigFlash() {
+      var hud = document.getElementById('bigFlashHud');
+      if (hud) return hud;
+      if (!document.body) return null;
+      var st = document.createElement('style');
+      st.id = 'bigFlashStyle';
+      st.textContent =
+        '#toast{display:none !important;}' +
+        '#bigFlashHud{position:fixed;inset:0;bottom:42px;z-index:99999;pointer-events:none;' +
+        'display:flex;align-items:center;justify-content:center;padding:20px;' +
+        'opacity:0;transition:opacity .18s ease;--bf-c:#48dbfb;--bf-bg:rgba(72,219,251,.18);--bf-glow:rgba(72,219,251,.45);}' +
+        '#bigFlashHud.bf-show{opacity:1;}' +
+        '#bigFlashHud.bf-pulse{animation:bfScreenFlash .48s ease-out;}' +
+        '@keyframes bfScreenFlash{' +
+        '0%{background:var(--bf-bg);box-shadow:inset 0 0 0 8px var(--bf-c),inset 0 0 110px var(--bf-glow);}' +
+        '100%{background:transparent;box-shadow:inset 0 0 0 3px var(--bf-c),inset 0 0 40px transparent;}}' +
+        '#bigFlashCard{background:rgba(0,4,50,.94);border:3px solid var(--bf-c);border-radius:18px;' +
+        'padding:20px 34px;max-width:min(90vw,780px);text-align:center;' +
+        'box-shadow:0 0 48px var(--bf-glow),0 16px 50px rgba(0,0,0,.7);' +
+        'transform:scale(.9);transition:transform .16s cubic-bezier(.2,.9,.3,1.2);}' +
+        '#bigFlashHud.bf-show #bigFlashCard{transform:scale(1);}' +
+        '#bigFlashMain{font:800 clamp(24px,4.4vw,52px)/1.12 "JetBrains Mono",monospace;' +
+        'color:var(--bf-c);letter-spacing:.5px;text-shadow:0 0 24px var(--bf-glow);word-break:break-word;}' +
+        '#bigFlashSub{margin-top:10px;font:700 clamp(12px,1.5vw,17px)/1.35 "JetBrains Mono",monospace;' +
+        'color:#ffffff;opacity:.92;word-break:break-word;display:none;}';
+      document.head.appendChild(st);
+      hud = document.createElement('div');
+      hud.id = 'bigFlashHud';
+      hud.innerHTML = '<div id="bigFlashCard"><div id="bigFlashMain"></div><div id="bigFlashSub"></div></div>';
+      document.body.appendChild(hud);
+      return hud;
+    }
+    function bigFlash(msg, duration, forceKind) {
+      var hud = ensureBigFlash();
+      if (!hud) return;
+      var raw = String(msg || '').replace(/(?:🚫){2,}/g, '🚫').trim();
+      if (!raw) return;
+      var kind = forceKind || '';
+      if (!kind) {
+        if (/❌|🚫|\b(error|failed|blocked|rolled back|ambiguous|not found|crashed)\b/i.test(raw)) kind = 'err';
+        else if (/⚠️|⚠|⏳|\b(warning|stopped|empty|skipped|missing)\b/i.test(raw)) kind = 'warn';
+        else if (/✅|⚡|✨|🚀|\b(pushed|applied|copied|saved|created|synced|verified|loaded|restored)\b/i.test(raw)) kind = 'ok';
+        else kind = 'info';
+      }
+      var pal = {
+        err:  ['#FF2D3A', 'rgba(255,45,58,.28)',  'rgba(255,45,58,.6)'],
+        warn: ['#FFD700', 'rgba(255,215,0,.24)',  'rgba(255,215,0,.55)'],
+        ok:   ['#00E676', 'rgba(0,230,118,.24)',  'rgba(0,230,118,.55)'],
+        info: ['#48DBFB', 'rgba(72,219,251,.22)', 'rgba(72,219,251,.55)']
+      }[kind] || ['#48DBFB', 'rgba(72,219,251,.22)', 'rgba(72,219,251,.55)'];
+      hud.style.setProperty('--bf-c', pal[0]);
+      hud.style.setProperty('--bf-bg', pal[1]);
+      hud.style.setProperty('--bf-glow', pal[2]);
+  
+      var lines = raw.split('\n').map(function (x) { return x.trim(); }).filter(Boolean);
+      var main = lines[0] || raw;
+      var sub = lines.slice(1).join(' · ');
+      if (!sub) {
+        var sep = main.indexOf(' — ');
+        if (sep > 0) { sub = main.slice(sep + 3).trim(); main = main.slice(0, sep).trim(); }
+        else if (main.length > 34) {
+          var m2 = main.match(/^(.{8,36}?[!:?])\s+(.+)$/);
+          if (m2) { main = m2[1].trim(); sub = m2[2].trim(); }
+        }
+      }
+      if (main.length > 56) { sub = (main.slice(56) + (sub ? ' · ' + sub : '')).trim(); main = main.slice(0, 56).trim() + '…'; }
+      var mainEl = document.getElementById('bigFlashMain');
+      var subEl  = document.getElementById('bigFlashSub');
+      mainEl.textContent = main;
+      if (sub) { subEl.textContent = sub.slice(0, 160); subEl.style.display = 'block'; }
+      else { subEl.textContent = ''; subEl.style.display = 'none'; }
+  
+      clearTimeout(_bigFlashTimer);
+      clearTimeout(_bigFlashPulseTimer);
+      hud.classList.remove('bf-show', 'bf-pulse');
+      void hud.offsetWidth;
+      hud.classList.add('bf-show', 'bf-pulse');
+      _bigFlashPulseTimer = setTimeout(function () { hud.classList.remove('bf-pulse'); }, 500);
+      var ms = Math.max(1300, Math.min(duration === undefined ? 2000 : duration, 3800));
+      _bigFlashTimer = setTimeout(function () { hud.classList.remove('bf-show'); }, ms);
+    }
+    function flash() { $fring.classList.add('on'); setTimeout(() => $fring.classList.remove('on'), 400); }
+    function toast(msg, duration) {
+      bigFlash(msg, duration);
+    }
 
   // ── Undo / Redo ───────────────────────────────────────────────────────
   function pushState() {
