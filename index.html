@@ -630,7 +630,10 @@ html body.compact-layout.ap-auto #controlBar #bottom-controls #pasteAndProcessBt
 /* ===== SIGPILL: BOTTOM BAR (new palette + hidden parts-map button) ===== */
 html body.compact-layout #controlBar #partsMapBtn,
 html body.compact-layout #controlBar #pushBtn,
-html body.compact-layout #controlBar #autoPatchBtn{display:none !important;}
+html body.compact-layout #controlBar #autoPatchBtn,
+html body.compact-layout #controlBar #payloadToggles,
+html body.compact-layout #controlBar #shotBtn,
+html body.compact-layout #controlBar #shotCopyBtn{display:none !important;}
 html body.compact-layout #controlBar{background:#2b1646 !important;}
 html body.compact-layout #controlBar #repoBar .repo-btn:nth-child(8n+1){background:#ff6b6b !important;}
 html body.compact-layout #controlBar #repoBar .repo-btn:nth-child(8n+2){background:#ff9f43 !important;}
@@ -2275,16 +2278,15 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
   });
 
   // ── Payload Toggle Persistence (remember checkbox state across sessions) ──
-  (function initPayloadToggles() {
-    const ids = ['incSuperPrompt', 'incInstructions', 'incSource'];
-    ids.forEach(id => {
-      const saved = localStorage.getItem('aicompiler_' + id);
-      if (saved !== null) document.getElementById(id).checked = (saved === 'true');
-      document.getElementById(id).addEventListener('change', (e) => {
-        localStorage.setItem('aicompiler_' + id, String(e.target.checked));
+    (function initPayloadToggles() {
+      var ids = ['incSuperPrompt', 'incInstructions', 'incSource', 'incLite'];
+      ids.forEach(function (id) {
+        var el = document.getElementById(id);
+        if (!el) return;
+        el.checked = true;
+        localStorage.setItem('aicompiler_' + id, 'true');
       });
-    });
-  })();
+    })();
 
   // ── Payload Button — builds prompt and copies it to clipboard ─────────
   window.__execCopy = function (text) {
