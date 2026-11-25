@@ -3750,16 +3750,28 @@ For multiple independent fixes, separate each OLD===SPLIT===NEW pair with ===BLO
           window._nutsErrTries = 0;
     
           const canAutoPush = !!(ghToken && targetRepo && window._loadedRepo && window._loadedRepo === targetRepo && ghCurrentRepo === targetRepo);
-          if (canAutoPush) {
-            ind.textContent = '⬆ Auto-Pushing…';
-            const ts = new Date().toISOString().replace('T', ' ').slice(0, 19);
-            const pushed = await ghPushFile(`Auto-push verified patch (${blocks.length} block${blocks.length > 1 ? 's' : ''}) — ${ts}`);
-            ind.textContent = '📋 Patch: Ready';
-            ind.className = pushed ? 'active' : '';
-            if (pushed) {
-              document.getElementById('statusLeft').textContent = `🚀 Verified & Auto-Pushed @ ${new Date().toLocaleTimeString()}`;
-            }
-          } else {
+                    if (canAutoPush) {
+                      clearTimeout(window._nutsPushTimer);
+                      const runPush = async () => {
+                        if (ghCurrentRepo !== targetRepo || window._loadedRepo !== targetRepo) return;
+                        ind.textContent = '⬆ Auto-Pushing…';
+                        const ts = new Date().toISOString().replace('T', ' ').slice(0, 19);
+                        const pushed = await ghPushFile(`Auto-push verified patch (${blocks.length} block${blocks.length > 1 ? 's' : ''}) — ${ts}`);
+                        ind.textContent = '📋 Patch: Ready';
+                        ind.className = pushed ? 'active' : '';
+                        if (pushed) {
+                          document.getElementById('statusLeft').textContent = `🚀 Verified & Auto-Pushed @ ${new Date().toLocaleTimeString()}`;
+                        }
+                      };
+                      if (window.__NUTS === true) {
+                        ind.textContent = '⏳ Push queued (15s)…';
+                        ind.className = 'receiving';
+                        toast('🥜 Patch applied — auto-pushing in 15s unless another patch lands', 3500);
+                        window._nutsPushTimer = setTimeout(runPush, 15000);
+                      } else {
+                        await runPush();
+                      }
+                    } else {
             ind.textContent = '📋 Patch: Ready';
             ind.className = 'active';
             document.getElementById('statusLeft').textContent = `✨ Patch verified & applied @ ${new Date().toLocaleTimeString()}`;
